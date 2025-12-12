@@ -2,7 +2,7 @@
 [![Caddy](https://img.shields.io/badge/Caddy-FFFFFF?logo=caddy&logoColor=1abc9c&style=for-the-badge)](https://github.com/caddyserver/caddy)
 [![WireGuard Easy](https://img.shields.io/badge/WireGuard_Easy-FFFFFF?logo=github&logoColor=181717&style=for-the-badge)](https://github.com/wg-easy/wg-easy)
 
-# Wireguard + Caddy + WireGuard Easy panel
+# WireGuard + Caddy + WireGuard Easy panel
 
 
 ### Как использовать скрипт:
