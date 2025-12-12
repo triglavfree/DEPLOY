@@ -2,7 +2,7 @@
 [![Caddy](https://img.shields.io/badge/Caddy-FFFFFF?logo=caddy&logoColor=1abc9c&style=for-the-badge)](https://github.com/caddyserver/caddy)
 [![WireGuard Easy](https://img.shields.io/badge/WireGuard_Easy-FFFFFF?logo=wireguard&logoColor=88171a&style=for-the-badge)](https://github.com/wg-easy/wg-easy)
 
-# 🛡️ WireGuard Easy + Caddy Setup
+# WireGuard Easy (Podman + nftables) + Caddy Setup
 Скрипт для установки WireGuard Easy с Caddy в качестве reverse proxy...
 
 
