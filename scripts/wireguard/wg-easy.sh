@@ -188,68 +188,58 @@ if [ -d "$APP_DIR/app" ]; then
     rm -rf "$APP_DIR/app"
 fi
 
-# Клонирование репозитория с правильными правами
+# Клонирование репозитория
 sudo -u "$WG_USER" git clone https://github.com/wg-easy/wg-easy "$APP_DIR/repo"
 cd "$APP_DIR/repo"
 
 # Добавление директории в safe.directory для пользователя wg-easy
 sudo -u "$WG_USER" git config --global --add safe.directory "$APP_DIR/repo"
 
-# Проверка доступных веток и тегов
-AVAILABLE_BRANCHES=$(git branch -a 2>/dev/null | grep -v 'HEAD' || true)
-AVAILABLE_TAGS=$(git tag -l 2>/dev/null || true)
+# Проверка доступных веток
+print_step "Проверка доступных веток и тегов..."
+AVAILABLE_BRANCHES=$(sudo -u "$WG_USER" git branch -a 2>/dev/null | grep -v 'HEAD' || true)
+AVAILABLE_TAGS=$(sudo -u "$WG_USER" git tag -l 2>/dev/null || true)
 
-print_step "Доступные ветки: $AVAILABLE_BRANCHES"
-print_step "Доступные теги: $AVAILABLE_TAGS"
+echo -e "${CYAN}Доступные ветки:${NC} $AVAILABLE_BRANCHES"
+echo -e "${CYAN}Доступные теги:${NC} $AVAILABLE_TAGS"
 
-# Выбор правильной версии (актуальная стратегия для wg-easy)
-if git show-ref --tags v16 &>/dev/null; then
-    print_success "Тег v16 найден"
-    sudo -u "$WG_USER" git checkout v16
-elif git show-ref --tags v15 &>/dev/null; then
-    print_success "Тег v15 найден"
-    sudo -u "$WG_USER" git checkout v15
-elif git show-ref --heads main &>/dev/null; then
-    print_success "Ветка main найдена"
-    sudo -u "$WG_USER" git checkout main
-elif git show-ref --heads master &>/dev/null; then
-    print_success "Ветка master найдена"
-    sudo -u "$WG_USER" git checkout master
+# Попытка переключиться на ветку production (официальный метод)
+if sudo -u "$WG_USER" git show-ref --heads production &>/dev/null; then
+    print_success "Ветка production найдена"
+    sudo -u "$WG_USER" git checkout production
 else
-    # Попытка найти любой тег версии
-    LATEST_TAG=$(git describe --tags $(git rev-list --tags --max-count=1) 2>/dev/null)
-    if [ -n "$LATEST_TAG" ]; then
-        print_success "Найден последний тег: $LATEST_TAG"
-        sudo -u "$WG_USER" git checkout "$LATEST_TAG"
+    print_warning "Ветка production не найдена. Пытаемся использовать main..."
+    if sudo -u "$WG_USER" git show-ref --heads main &>/dev/null; then
+        sudo -u "$WG_USER" git checkout main
+        print_success "Ветка main найдена и использована"
     else
-        print_warning "Не удалось определить версию. Используем master"
-        sudo -u "$WG_USER" git checkout master || sudo -u "$WG_USER" git checkout main || true
+        print_warning "Ветки production и main не найдены. Используем последний тег..."
+        # Получаем последний тег
+        LATEST_TAG=$(sudo -u "$WG_USER" git describe --tags $(sudo -u "$WG_USER" git rev-list --tags --max-count=1) 2>/dev/null)
+        if [ -n "$LATEST_TAG" ]; then
+            sudo -u "$WG_USER" git checkout "$LATEST_TAG"
+            print_success "Используется последний тег: $LATEST_TAG"
+        else
+            print_error "Не удалось найти подходящую ветку или тег для wg-easy"
+        fi
     fi
 fi
-
-# Проверка текущей версии
-CURRENT_VERSION=$(git describe --tags --always 2>/dev/null || git rev-parse --short HEAD)
-print_success "Выбрана версия: $CURRENT_VERSION"
 
 # Перемещение src в /app (официальный метод)
-if [ -d "src" ]; then
-    sudo -u "$WG_USER" mv src "$APP_DIR/app"
-else
-    # Если нет директории src, ищем альтернативную структуру
-    if [ -d "frontend" ] && [ -d "backend" ]; then
-        print_warning "Найдена новая структура репозитория. Создаем app директорию..."
-        mkdir "$APP_DIR/app"
-        sudo -u "$WG_USER" mv frontend backend package.json package-lock.json "$APP_DIR/app/"
-    else
-        print_error "Не найдена директория src и альтернативная структура. Структура репозитория изменилась."
-    fi
-fi
-
-cd "$APP_DIR/app"
+print_step "Перемещение файлов в /app директорию..."
+sudo -u "$WG_USER" mkdir -p "$APP_DIR/app"
+sudo -u "$WG_USER" cp -r src/* "$APP_DIR/app/"
 
 # Установка зависимостей с оптимизацией (--omit=dev)
+cd "$APP_DIR/app"
+print_step "Установка зависимостей с оптимизацией..."
 sudo -u "$WG_USER" npm ci --omit=dev
 print_success "Зависимости установлены с оптимизацией (--omit=dev)"
+
+# Копирование node_modules в родительскую директорию (официальный метод)
+print_step "Копирование node_modules..."
+sudo -u "$WG_USER" cp -r node_modules "$APP_DIR/"
+print_success "node_modules скопированы"
 
 # Генерация случайного пароля
 RANDOM_PASSWORD=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 16)
@@ -271,22 +261,24 @@ UI_CHART_TYPE=bar
 EOF
 
 chown "$WG_USER:$WG_USER" "$APP_DIR/app/.env"
-print_success ".env файл создан"
+print_success ".env файл создан с русским языком"
 
 # =============== ШАГ 6: SYSTEMD СЕРВИС (ОФИЦИАЛЬНЫЙ ШАБЛОН) ===============
 print_step "Шаг 6: Настройка systemd сервиса (официальный шаблон)"
 
 # Загрузка официального шаблона сервиса
-curl -sLo /etc/systemd/system/wg-easy.service https://raw.githubusercontent.com/wg-easy/wg-easy/production/wg-easy.service
+curl -sLo /etc/systemd/system/wg-easy.service https://raw.githubusercontent.com/wg-easy/wg-easy/main/wg-easy.service
 
 # Модификация шаблона под нашу конфигурацию
 sed -i "s|/path/to/wireguard-easy|$APP_DIR/app|g" /etc/systemd/system/wg-easy.service
 sed -i "s|user = .*|user = $WG_USER|g" /etc/systemd/system/wg-easy.service
 sed -i "s|group = .*|group = $WG_USER|g" /etc/systemd/system/wg-easy.service
 sed -i "s|Environment=PORT=.*|Environment=PORT=51821|g" /etc/systemd/system/wg-easy.service
+sed -i "s|Environment=WEBUI_HOST=.*|Environment=WEBUI_HOST=0.0.0.0|g" /etc/systemd/system/wg-easy.service
+sed -i "s|EnvironmentFile=.*|EnvironmentFile=$APP_DIR/app/.env|g" /etc/systemd/system/wg-easy.service
 
-# Добавление необходимых capabilities
-sed -i '/^AmbientCapabilities=/a AmbientCapabilities=NET_ADMIN NET_RAW SYS_MODULE' /etc/systemd/system/wg-easy.service
+# Замена всех оставшихся 'REPLACEME' на реальные пути
+sed -i "s|REPLACEME|$APP_DIR|g" /etc/systemd/system/wg-easy.service
 
 # Перезагрузка systemd и запуск сервиса
 systemctl daemon-reload
@@ -460,16 +452,19 @@ echo -e "${YELLOW}Важно:${NC}"
 echo -e "1. ${CYAN}Подождите 2-3 минуты${NC} для получения SSL сертификата Let's Encrypt"
 echo -e "2. ${CYAN}Проверьте DNS запись${NC} для $DOMAIN - она должна указывать на IP этого сервера"
 echo -e "3. ${CYAN}Для добавления клиентов${NC} используйте веб-интерфейс по адресу https://$DOMAIN"
-echo -e "4. ${CYAN}Для резервного копирования${NC} сохраните содержимое $APP_DIR/app"
+echo -e "4. ${CYAN}Для резервного копирования${NC} сохраните содержимое $APP_DIR/app и $APP_DIR/node_modules"
 echo ""
-echo -e "${YELLOW}Обновление wg-easy:${NC}"
+echo -e "${YELLOW}Обновление wg-easy (официальный метод):${NC}"
 echo -e "  ${GREEN}cd $APP_DIR/repo${NC}"
 echo -e "  ${GREEN}sudo -u $WG_USER git pull${NC}"
-echo -e "  ${GREEN}sudo -u $WG_USER git checkout production${NC}"
-echo -e "  ${GREEN}sudo -u $WG_USER mv src $APP_DIR/app_new${NC}"
-echo -e "  ${GREEN}sudo -u $WG_USER cp -r $APP_DIR/app/.env $APP_DIR/app_new/${NC}"
-echo -e "  ${GREEN}mv $APP_DIR/app $APP_DIR/app_old && mv $APP_DIR/app_new $APP_DIR/app${NC}"
-echo -e "  ${GREEN}chown -R $WG_USER:$WG_USER $APP_DIR/app${NC}"
+echo -e "  ${GREEN}sudo -u $WG_USER git checkout production 2>/dev/null || sudo -u $WG_USER git checkout main${NC}"
+echo -e "  ${GREEN}rm -rf $APP_DIR/app $APP_DIR/node_modules${NC}"
+echo -e "  ${GREEN}sudo -u $WG_USER mkdir -p $APP_DIR/app${NC}"
+echo -e "  ${GREEN}sudo -u $WG_USER cp -r src/* $APP_DIR/app/${NC}"
+echo -e "  ${GREEN}cd $APP_DIR/app${NC}"
+echo -e "  ${GREEN}sudo -u $WG_USER npm ci --omit=dev${NC}"
+echo -e "  ${GREEN}sudo -u $WG_USER cp -r node_modules $APP_DIR/${NC}"
+echo -e "  ${GREEN}chown -R $WG_USER:$WG_USER $APP_DIR/app $APP_DIR/node_modules${NC}"
 echo -e "  ${GREEN}systemctl restart wg-easy${NC}"
 echo ""
 echo -e "${PURPLE}==================================================${NC}"
