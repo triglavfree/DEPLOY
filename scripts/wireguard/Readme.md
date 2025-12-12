@@ -1,3 +1,6 @@
+# wireguard + caddy + wg-easy panel
+
+
 ### Как использовать скрипт:
 - Для домена `vpn.duckdns.com`: [Duck DNS](https://www.duckdns.org/)
 ```bash
