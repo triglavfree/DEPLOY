@@ -209,62 +209,104 @@ chown -R root:root /etc/containers/systemd/wg-easy
 chmod -R 755 /etc/containers/systemd/wg-easy
 print_success "Директории созданы"
 
-# 5.2. Создание файла конфигурации контейнера
-print_step "Создание конфигурации контейнера wg-easy"
-cat > /etc/containers/systemd/wg-easy/wg-easy.container <<EOF
-[Container]
-ContainerName=wg-easy
-Image=ghcr.io/wg-easy/wg-easy:15
-AutoUpdate=registry
-Network=wg-easy.network
-PublishPort=51820:51820/udp
-PublishPort=51821:51821/tcp
-AddCapability=NET_ADMIN
-AddCapability=SYS_MODULE
-AddCapability=NET_RAW
-Sysctl=net.ipv4.ip_forward=1
-Sysctl=net.ipv4.conf.all.src_valid_mark=1
-Sysctl=net.ipv6.conf.all.disable_ipv6=0
-Sysctl=net.ipv6.conf.all.forwarding=1
-Sysctl=net.ipv6.conf.default.forwarding=1
-Environment=PORT=51821
-Environment=WEBUI_HOST=0.0.0.0
-Environment=LANG=ru
-Environment=UI_TRAFFIC_STATS=true
-Environment=UI_CHART_TYPE=bar
-Environment=WG_HOST=${DOMAIN%%.*}
-Environment=WG_PORT=51820
-Environment=WG_DEFAULT_ADDRESS=10.8.0.x
-Environment=WG_DEFAULT_DNS=1.1.1.1,8.8.8.8
-Environment=WG_MTU=1420
-Environment=WG_PERSISTENT_KEEPALIVE=25
-Environment=PASSWORD=$RANDOM_PASSWORD
-[Install]
-WantedBy=default.target
-EOF
-print_success "Конфигурация контейнера создана"
+# 5.2. Создание контейнера wg-easy
+print_step "Создание контейнера wg-easy"
+podman create \
+    --name wg-easy \
+    --network wg-easy \
+    --publish 51820:51820/udp \
+    --publish 51821:51821/tcp \
+    --cap-add NET_ADMIN \
+    --cap-add SYS_MODULE \
+    --cap-add NET_RAW \
+    --sysctl net.ipv4.ip_forward=1 \
+    --sysctl net.ipv4.conf.all.src_valid_mark=1 \
+    --sysctl net.ipv6.conf.all.disable_ipv6=0 \
+    --sysctl net.ipv6.conf.all.forwarding=1 \
+    --sysctl net.ipv6.conf.default.forwarding=1 \
+    -e PORT=51821 \
+    -e WEBUI_HOST=0.0.0.0 \
+    -e LANG=ru \
+    -e UI_TRAFFIC_STATS=true \
+    -e UI_CHART_TYPE=bar \
+    -e WG_HOST=${DOMAIN%%.*} \
+    -e WG_PORT=51820 \
+    -e WG_DEFAULT_ADDRESS=10.8.0.x \
+    -e WG_DEFAULT_DNS=1.1.1.1,8.8.8.8 \
+    -e WG_MTU=1420 \
+    -e WG_PERSISTENT_KEEPALIVE=25 \
+    -e PASSWORD=$RANDOM_PASSWORD \
+    ghcr.io/wg-easy/wg-easy:15
 
-# 5.3. Создание файла конфигурации сети
+print_success "Контейнер wg-easy создан"
+
+# 5.3. Генерация systemd unit файла
+print_step "Генерация systemd unit файла для wg-easy"
+mkdir -p /etc/systemd/system
+podman generate systemd --new --files --name wg-easy --restart-policy always -o /etc/systemd/system/
+print_success "Systemd unit файл сгенерирован"
+
+# 5.4. Настройка сети Podman
 print_step "Создание конфигурации сети Podman"
-cat > /etc/containers/systemd/wg-easy/wg-easy.network <<EOF
-[Network]
-NetworkName=wg-easy
-IPv6=true
+cat > /etc/containers/networks/wg-easy.json <<EOF
+{
+    "name": "wg-easy",
+    "ipv6_enabled": true,
+    "cniVersion": "0.4.0",
+    "plugins": [
+        {
+            "type": "bridge",
+            "bridge": "cni-podman0",
+            "isDefaultGateway": true,
+            "ipMasq": true,
+            "hairpinMode": true,
+            "ipam": {
+                "type": "host-local",
+                "routes": [
+                    {
+                        "dst": "0.0.0.0/0"
+                    }
+                ],
+                "ranges": [
+                    [
+                        {
+                            "subnet": "10.89.0.0/24",
+                            "gateway": "10.89.0.1"
+                        }
+                    ]
+                ]
+            }
+        },
+        {
+            "type": "portmap",
+            "capabilities": {
+                "portMappings": true
+            }
+        },
+        {
+            "type": "firewall"
+        },
+        {
+            "type": "tuning"
+        }
+    ]
+}
 EOF
 print_success "Конфигурация сети создана"
 
-# 5.4. Перезагрузка systemd и запуск контейнера
+# 5.5. Перезагрузка systemd и запуск контейнера
 print_step "Запуск контейнера wg-easy через systemd"
 systemctl daemon-reload
-systemctl enable --now podman
 
-# Остановка существующего сервиса, если он есть
-if systemctl is-active --quiet wg-easy; then
-    systemctl stop wg-easy
+# Остановка и удаление существующего сервиса, если он есть
+if systemctl is-active --quiet wg-easy.service; then
+    systemctl stop wg-easy.service
+fi
+if systemctl is-enabled --quiet wg-easy.service; then
+    systemctl disable wg-easy.service
 fi
 
-systemctl daemon-reload
-systemctl enable --now wg-easy
+systemctl enable --now wg-easy.service
 
 # Ждем запуска контейнера с таймаутом
 print_step "Ожидание запуска контейнера (до 30 секунд)..."
@@ -286,7 +328,7 @@ if ! podman ps --format "{{.Names}}" | grep -q "wg-easy"; then
     
     # Попытка перезапуска
     print_step "Попытка перезапуска контейнера..."
-    systemctl restart wg-easy
+    systemctl restart wg-easy.service
     sleep 5
     
     if podman ps --format "{{.Names}}" | grep -q "wg-easy"; then
