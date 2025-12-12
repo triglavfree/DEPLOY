@@ -11,6 +11,10 @@
 ```bash
 curl -s https://raw.githubusercontent.com/triglavfree/deploy/main/scripts/wireguard/wg-easy.sh | sudo bash -s vpn.duckdns.com
 ```
+- Для вставки домена из буфера обмена в процессе выполнения скрипта:
+```bash
+curl -s https://raw.githubusercontent.com/triglavfree/deploy/main/scripts/wireguard/wg-easy.sh | sudo bash
+```
 ### Ключевые преимущества гибридного подхода:
 
 ✅ Официальный метод установки wg-easy:
