@@ -11,15 +11,15 @@ curl -s https://raw.githubusercontent.com/triglavfree/deploy/main/scripts/wiregu
 ✅ Официальный метод установки wg-easy:
 
    - Клонирование production ветки для стабильности
-   - npm ci --omit=dev для оптимизации зависимостей
-   - Официальный systemd сервис с правильными настройками
+   - `npm ci --omit=dev` для оптимизации зависимостей
+   - Официальный `systemd` сервис с правильными настройками
 
 ✅ Максимальная безопасность:
 
    - Отдельный пользователь wg-easy вместо root
-   - Caddy с автоматическими SSL-сертификатами (никакого INSECURE=true)
+   - Caddy с автоматическими SSL-сертификатами (никакого `INSECURE=true`)
    - UFW + Fail2Ban для защиты от атак
-   - nftables вместо iptables для лучшей производительности
+   - `nftables` вместо `iptables` для лучшей производительности
 
 ✅ Оптимизации для слабого VPS (1CPU, 1GB RAM):
 
