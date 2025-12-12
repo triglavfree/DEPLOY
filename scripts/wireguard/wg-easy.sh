@@ -188,32 +188,63 @@ if [ -d "$APP_DIR/app" ]; then
     rm -rf "$APP_DIR/app"
 fi
 
-# Клонирование репозитория
+# Клонирование репозитория с правильными правами
 sudo -u "$WG_USER" git clone https://github.com/wg-easy/wg-easy "$APP_DIR/repo"
 cd "$APP_DIR/repo"
 
-# Выбор правильной ветки или тега
-if git show-ref --heads production &>/dev/null; then
-    print_success "Ветка production найдена"
-    sudo -u "$WG_USER" git checkout production
+# Добавление директории в safe.directory для пользователя wg-easy
+sudo -u "$WG_USER" git config --global --add safe.directory "$APP_DIR/repo"
+
+# Проверка доступных веток и тегов
+AVAILABLE_BRANCHES=$(git branch -a 2>/dev/null | grep -v 'HEAD' || true)
+AVAILABLE_TAGS=$(git tag -l 2>/dev/null || true)
+
+print_step "Доступные ветки: $AVAILABLE_BRANCHES"
+print_step "Доступные теги: $AVAILABLE_TAGS"
+
+# Выбор правильной версии (актуальная стратегия для wg-easy)
+if git show-ref --tags v16 &>/dev/null; then
+    print_success "Тег v16 найден"
+    sudo -u "$WG_USER" git checkout v16
+elif git show-ref --tags v15 &>/dev/null; then
+    print_success "Тег v15 найден"
+    sudo -u "$WG_USER" git checkout v15
 elif git show-ref --heads main &>/dev/null; then
-    print_warning "Ветка production не найдена, используем main"
+    print_success "Ветка main найдена"
     sudo -u "$WG_USER" git checkout main
+elif git show-ref --heads master &>/dev/null; then
+    print_success "Ветка master найдена"
+    sudo -u "$WG_USER" git checkout master
 else
-    # Используем последний стабильный релиз
-    LATEST_TAG=$(git describe --tags $(git rev-list --tags --max-count=1) 2>/dev/null || echo "v15")
-    print_warning "Ветки production и main не найдены, используем последний релиз: $LATEST_TAG"
-    # Проверяем существование тега перед переключением
-    if git show-ref --tags "$LATEST_TAG" &>/dev/null; then
+    # Попытка найти любой тег версии
+    LATEST_TAG=$(git describe --tags $(git rev-list --tags --max-count=1) 2>/dev/null)
+    if [ -n "$LATEST_TAG" ]; then
+        print_success "Найден последний тег: $LATEST_TAG"
         sudo -u "$WG_USER" git checkout "$LATEST_TAG"
     else
-        print_warning "Тег $LATEST_TAG не найден, используем main"
-        sudo -u "$WG_USER" git checkout main
+        print_warning "Не удалось определить версию. Используем master"
+        sudo -u "$WG_USER" git checkout master || sudo -u "$WG_USER" git checkout main || true
     fi
 fi
 
+# Проверка текущей версии
+CURRENT_VERSION=$(git describe --tags --always 2>/dev/null || git rev-parse --short HEAD)
+print_success "Выбрана версия: $CURRENT_VERSION"
+
 # Перемещение src в /app (официальный метод)
-sudo -u "$WG_USER" mv src "$APP_DIR/app"
+if [ -d "src" ]; then
+    sudo -u "$WG_USER" mv src "$APP_DIR/app"
+else
+    # Если нет директории src, ищем альтернативную структуру
+    if [ -d "frontend" ] && [ -d "backend" ]; then
+        print_warning "Найдена новая структура репозитория. Создаем app директорию..."
+        mkdir "$APP_DIR/app"
+        sudo -u "$WG_USER" mv frontend backend package.json package-lock.json "$APP_DIR/app/"
+    else
+        print_error "Не найдена директория src и альтернативная структура. Структура репозитория изменилась."
+    fi
+fi
+
 cd "$APP_DIR/app"
 
 # Установка зависимостей с оптимизацией (--omit=dev)
