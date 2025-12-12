@@ -177,11 +177,22 @@ fi
 mkdir -p "$APP_DIR"
 chown "$WG_USER:$WG_USER" "$APP_DIR"
 
+# Очистка существующих директорий перед клонированием
+if [ -d "$APP_DIR/repo" ]; then
+    print_warning "Директория $APP_DIR/repo уже существует. Очищаем..."
+    rm -rf "$APP_DIR/repo"
+fi
+
+if [ -d "$APP_DIR/app" ]; then
+    print_warning "Директория $APP_DIR/app уже существует. Очищаем..."
+    rm -rf "$APP_DIR/app"
+fi
+
 # Клонирование репозитория
 sudo -u "$WG_USER" git clone https://github.com/wg-easy/wg-easy "$APP_DIR/repo"
 cd "$APP_DIR/repo"
 
-# Проверка доступных веток и выбор правильной
+# Выбор правильной ветки или тега
 if git show-ref --heads production &>/dev/null; then
     print_success "Ветка production найдена"
     sudo -u "$WG_USER" git checkout production
@@ -189,10 +200,16 @@ elif git show-ref --heads main &>/dev/null; then
     print_warning "Ветка production не найдена, используем main"
     sudo -u "$WG_USER" git checkout main
 else
-    # Если нет ни production, ни main - используем последний стабильный релиз
-    LATEST_TAG=$(git describe --tags $(git rev-list --tags --max-count=1))
+    # Используем последний стабильный релиз
+    LATEST_TAG=$(git describe --tags $(git rev-list --tags --max-count=1) 2>/dev/null || echo "v15")
     print_warning "Ветки production и main не найдены, используем последний релиз: $LATEST_TAG"
-    sudo -u "$WG_USER" git checkout "$LATEST_TAG"
+    # Проверяем существование тега перед переключением
+    if git show-ref --tags "$LATEST_TAG" &>/dev/null; then
+        sudo -u "$WG_USER" git checkout "$LATEST_TAG"
+    else
+        print_warning "Тег $LATEST_TAG не найден, используем main"
+        sudo -u "$WG_USER" git checkout main
+    fi
 fi
 
 # Перемещение src в /app (официальный метод)
@@ -200,8 +217,7 @@ sudo -u "$WG_USER" mv src "$APP_DIR/app"
 cd "$APP_DIR/app"
 
 # Установка зависимостей с оптимизацией (--omit=dev)
-# Игнорируем предупреждения Python для fail2ban во время установки
-PYTHONWARNINGS=ignore sudo -u "$WG_USER" npm ci --omit=dev
+sudo -u "$WG_USER" npm ci --omit=dev
 print_success "Зависимости установлены с оптимизацией (--omit=dev)"
 
 # Генерация случайного пароля
