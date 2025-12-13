@@ -240,14 +240,30 @@ podman create \
 
 print_success "Контейнер wg-easy создан"
 
-# 5.3. Генерация systemd unit файла
+# 5.3. Генерация systemd unit файла (исправленный синтаксис для Podman v4+)
 print_step "Генерация systemd unit файла для wg-easy"
-mkdir -p /etc/systemd/system
-podman generate systemd --new --files --name wg-easy --restart-policy always -o /etc/systemd/system/
+mkdir -p /tmp/wg-easy-systemd
+cd /tmp/wg-easy-systemd
+
+# Генерация файлов в текущую директорию
+podman generate systemd --new --files --name wg-easy --restart-policy always
+
+# Перемещение файлов в правильную директорию
+if [ -f "container-wg-easy.service" ]; then
+    mv container-wg-easy.service /etc/systemd/system/wg-easy.service
+elif [ -f "wg-easy.service" ]; then
+    mv wg-easy.service /etc/systemd/system/wg-easy.service
+else
+    print_error "Не удалось найти сгенерированный systemd unit файл"
+fi
+
+cd -
+rm -rf /tmp/wg-easy-systemd
 print_success "Systemd unit файл сгенерирован"
 
 # 5.4. Настройка сети Podman
 print_step "Создание конфигурации сети Podman"
+mkdir -p /etc/containers/networks
 cat > /etc/containers/networks/wg-easy.json <<EOF
 {
     "name": "wg-easy",
@@ -299,11 +315,13 @@ print_step "Запуск контейнера wg-easy через systemd"
 systemctl daemon-reload
 
 # Остановка и удаление существующего сервиса, если он есть
-if systemctl is-active --quiet wg-easy.service; then
-    systemctl stop wg-easy.service
-fi
-if systemctl is-enabled --quiet wg-easy.service; then
-    systemctl disable wg-easy.service
+if systemctl list-unit-files | grep -q "wg-easy.service"; then
+    if systemctl is-active --quiet wg-easy.service; then
+        systemctl stop wg-easy.service
+    fi
+    if systemctl is-enabled --quiet wg-easy.service; then
+        systemctl disable wg-easy.service
+    fi
 fi
 
 systemctl enable --now wg-easy.service
