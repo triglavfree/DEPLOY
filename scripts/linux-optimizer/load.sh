@@ -73,14 +73,6 @@ if [ "$ID" != "ubuntu" ] || [ "$(echo $VERSION_ID | cut -d. -f1)" != "24" ]; the
     fi
 fi
 
-# =============== УСТАНОВКА SUDO (ДЛЯ MINIMAL) ===============
-if ! command -v sudo &> /dev/null; then
-    print_step "Установка sudo для Ubuntu minimal"
-    apt-get update -y >/dev/null 2>&1
-    DEBIAN_FRONTEND=noninteractive apt-get install -y sudo >/dev/null 2>&1
-    print_success "sudo установлен"
-fi
-
 # =============== БАЗОВЫЕ НАСТРОЙКИ ===============
 print_step "Базовые настройки системы"
 
@@ -106,9 +98,7 @@ print_step "Шаг 1: Установка базовых пакетов"
 PACKAGES=(
     "curl" "wget" "gnupg" "lsb-release" "ca-certificates"
     "net-tools" "ufw" "fail2ban" "unzip" "git"
-    "htop" "iotop" "iftop" "nmon" "tmux" "ncdu"
     "rsyslog" "logrotate" "unattended-upgrades"
-    "zram-config" "systemd-zram-setup"
 )
 
 # Установка пакетов с прогрессом
