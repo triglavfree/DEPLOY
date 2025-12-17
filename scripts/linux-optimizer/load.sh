@@ -356,7 +356,7 @@ fi
 # Статус Fail2Ban
 FAIL2BAN_SERVICE="fail2ban"
 if systemctl is-active --quiet "$FAIL2BAN_SERVICE"; then
-    print_success "Fail2Ban: активен (порт SSH: $SSH_PORT)"
+    print_success "Fail2Ban: активен (порт: $SSH_PORT)"
 else
     print_warning "Fail2Ban: неактивен"
 fi
@@ -364,7 +364,7 @@ fi
 # Статус UFW
 UFW_STATUS=$(ufw status | grep -i "Status: active" 2>/dev/null || echo "inactive")
 if [[ "$UFW_STATUS" == *"active"* ]]; then
-    print_success "UFW: активен (защита сети включена)"
+    print_success "UFW: активен"
 else
     print_warning "UFW: неактивен (защита сети отключена!)"
 fi
