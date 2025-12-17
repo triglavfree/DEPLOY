@@ -250,16 +250,16 @@ printf '\033c'  # Самый надежный способ очистки экр
 print_step "ФИНАЛЬНАЯ СВОДКА"
 
 # Swap и BBR
+BBR_STATUS=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo "неизвестно")
 print_info "BBR: ${BBR_STATUS}"
 SWAP_SIZE=$(swapon --show --bytes | awk 'NR==2 {print $3}' 2>/dev/null || echo "неизвестно")
 print_info "Swap: ${SWAP_SIZE:-0} байт активно"
-BBR_STATUS=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo "неизвестно")
 
 # Статус NVMe/SSD оптимизации
+TRIM_STATUS=$(grep -q 'discard' /etc/fstab 2>/dev/null && echo "включен" || echo "отключен")
 print_info "TRIM для SSD: $TRIM_STATUS"
 SCHEDULER_STATUS=$(cat /sys/block/"$ROOT_DEVICE"/queue/scheduler 2>/dev/null || echo "неизвестно")
 print_info "Планировщик диска: ${SCHEDULER_STATUS:-неизвестно}"
-TRIM_STATUS=$(grep -q 'discard' /etc/fstab 2>/dev/null && echo "включен" || echo "отключен")
 
 # Внешний IP - улучшенная версия с резервными вариантами
 EXTERNAL_IP=$(curl -s4 https://api.ipify.org 2>/dev/null || \
