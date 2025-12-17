@@ -80,88 +80,7 @@ else
     print_warning "BBR уже активен"
 fi
 
-# =============== ШАГ 3: ОПТИМИЗАЦИЯ ДИСКА ===============
-print_step "Оптимизация диска"
-
-ROOT_DEVICE=$(df / --output=source | tail -1 | sed 's/\/dev\///' | sed 's/[0-9]*$//')
-print_info "Корневое устройство: $ROOT_DEVICE"
-
-# Определение типа диска
-DISK_TYPE="hdd"
-if [[ "$ROOT_DEVICE" == nvme* ]]; then
-    DISK_TYPE="nvme"
-elif [ -f "/sys/block/$ROOT_DEVICE/device/model" ] && grep -qi "nvme" "/sys/block/$ROOT_DEVICE/device/model" 2>/dev/null; then
-    DISK_TYPE="nvme"
-elif [ -f "/sys/block/$ROOT_DEVICE/queue/rotational" ] && [ "$(cat /sys/block/$ROOT_DEVICE/queue/rotational 2>/dev/null)" = "0" ]; then
-    DISK_TYPE="ssd"
-elif [[ "$ROOT_DEVICE" == vda || "$ROOT_DEVICE" == vdb || "$ROOT_DEVICE" == sda || "$ROOT_DEVICE" == sdb ]]; then
-    DISK_TYPE="virtio"
-else
-    DISK_TYPE="hdd"
-fi
-print_info "Определённый тип диска: $DISK_TYPE"
-
-# Настройка планировщика
-if [ -f /sys/block/"$ROOT_DEVICE"/queue/scheduler ]; then
-    CURRENT_SCHEDULER=$(cat /sys/block/"$ROOT_DEVICE"/queue/scheduler 2>/dev/null | grep -o '\[.*\]' | tr -d '[]' || echo "unknown")
-    print_info "Текущий планировщик: ${CURRENT_SCHEDULER:-неизвестно}"
-
-    if [[ "$DISK_TYPE" == "nvme" ]]; then
-        TARGET_SCHEDULER="none"
-    elif [[ "$DISK_TYPE" == "virtio" ]]; then
-        TARGET_SCHEDULER="none"
-    elif [[ "$DISK_TYPE" == "ssd" ]]; then
-        TARGET_SCHEDULER="mq-deadline"
-    else
-        TARGET_SCHEDULER="mq-deadline"
-    fi
-
-    if [[ "$CURRENT_SCHEDULER" != "$TARGET_SCHEDULER" ]]; then
-        if echo "$TARGET_SCHEDULER" > /sys/block/"$ROOT_DEVICE"/queue/scheduler 2>/dev/null; then
-            print_success "Планировщик установлен в '$TARGET_SCHEDULER'"
-        else
-            print_warning "Не удалось установить планировщик '$TARGET_SCHEDULER'"
-        fi
-    else
-        print_warning "Планировщик уже оптимизирован: $CURRENT_SCHEDULER"
-    fi
-else
-    if [[ "$DISK_TYPE" == "nvme" ]]; then
-        print_success "NVMe: планировщик не используется (аппаратное управление)"
-    else
-        print_warning "Файл scheduler недоступен (возможно, NVMe или нестандартное устройство)"
-    fi
-fi
-
-# Управление TRIM
-if [[ "$DISK_TYPE" == "nvme" || "$DISK_TYPE" == "ssd" ]]; then
-    if ! grep -q 'discard' /etc/fstab; then
-        if grep -q " / " /etc/fstab; then
-            sed -i '/\/ /s/\(defaults[^,]*\)/\1,discard/' /etc/fstab
-            print_success "TRIM (discard) включён — актуально для SSD/NVMe"
-        else
-            print_warning "Не удалось включить TRIM (корневой раздел не найден в fstab)"
-        fi
-    else
-        print_warning "TRIM (discard) уже включён"
-    fi
-else
-    if grep -q 'discard' /etc/fstab; then
-        sed -i 's/,discard//g; s/discard,//g; s/discard//g' /etc/fstab
-        print_success "TRIM (discard) отключён — не поддерживается для $DISK_TYPE"
-    else
-        print_info "TRIM не применяется для $DISK_TYPE (корректно)"
-    fi
-fi
-
-# Проверка NVMe
-if [[ "$DISK_TYPE" == "nvme" ]] && command -v nvme &> /dev/null; then
-    print_info "Проверка состояния NVMe:"
-    nvme smart-log "/dev/$ROOT_DEVICE" 2>/dev/null | grep -E "(critical|temperature|media|wear)" || true
-fi
-print_success "Оптимизация диска завершена"
-
-# =============== ШАГ 4: НАСТРОЙКА ВИРТУАЛЬНОЙ ПАМЯТИ (ZRAM или SWAP) ===============
+# =============== ШАГ 3: НАСТРОЙКА ВИРТУАЛЬНОЙ ПАМЯТИ (ZRAM или SWAP) ===============
 print_step "Настройка виртуальной памяти (авто-определение)"
 
 TOTAL_MEM_MB=$(free -m | awk '/^Mem:/{print $2}')
@@ -278,54 +197,103 @@ else
         print_warning "Swap уже активен"
     fi
 fi
-# =============== ШАГ 5: ОПТИМИЗАЦИЯ ЯДРА ===============
-print_step "Применение оптимизаций ядра"
+# =============== ШАГ 4: УНИВЕРСАЛЬНАЯ ОПТИМИЗАЦИЯ ЯДРА ===============
+print_step "Универсальная оптимизация ядра"
 
+# Все параметры в одном месте с комментариями
+declare -A KERNEL_OPTS
 KERNEL_OPTS=(
     # Память и диск
-    "vm.swappiness=10"
-    "vm.vfs_cache_pressure=100"
-    "vm.dirty_background_ratio=5"
-    "vm.dirty_ratio=10"
-    "vm.dirty_expire_centisecs=500"
-    "vm.dirty_writeback_centisecs=100"
-    "vm.min_free_kbytes=65536"
-    "vm.overcommit_memory=1"
+    ["vm.swappiness"]="10"                  # Баланс использования RAM/swap
+    ["vm.vfs_cache_pressure"]="100"         # Давление на кэш файловой системы
+    ["vm.dirty_background_ratio"]="5"      # Фоновая запись грязных страниц
+    ["vm.dirty_ratio"]="10"                 # Максимальный процент грязных страниц
+    ["vm.dirty_expire_centisecs"]="500"    # Время жизни грязных страниц (5 сек)
+    ["vm.dirty_writeback_centisecs"]="100" # Интервал фоновой записи (1 сек)
+    ["vm.min_free_kbytes"]="65536"          # Минимум свободной памяти (64MB)
+    ["vm.overcommit_memory"]="1"            # Разрешить overcommit памяти
     
     # Сеть
-    "net.core.rmem_max=16777216"
-    "net.core.wmem_max=16777216"
-    "net.core.somaxconn=1024"
-    "net.core.netdev_max_backlog=2000"
-    "net.ipv4.tcp_rmem=4096 87380 16777216"
-    "net.ipv4.tcp_wmem=4096 65536 16777216"
-    "net.ipv4.tcp_max_syn_backlog=2048"
-    "net.ipv4.tcp_slow_start_after_idle=0"
-    "net.ipv4.tcp_notsent_lowat=16384"
-    "net.ipv4.tcp_fastopen=3"
-    "net.ipv4.tcp_syncookies=1"
-    "net.ipv4.tcp_tw_reuse=1"
-    "net.ipv4.tcp_fin_timeout=15"
-    "net.ipv4.ip_forward=1"
-    "net.ipv4.conf.all.forwarding=1"
-    "net.ipv4.conf.default.forwarding=1"
-    "net.ipv4.conf.all.src_valid_mark=1"
+    ["net.core.rmem_max"]="16777216"        # Макс. размер recv буфера (16MB)
+    ["net.core.wmem_max"]="16777216"        # Макс. размер send буфера (16MB)
+    ["net.core.somaxconn"]="1024"           # Макс. длина очереди подключений
+    ["net.core.netdev_max_backlog"]="2000"  # Макс. пакетов в очереди NIC
+    ["net.ipv4.tcp_rmem"]="4096 87380 16777216"  # Мин/деф/макс размер recv буфера TCP
+    ["net.ipv4.tcp_wmem"]="4096 65536 16777216"  # Мин/деф/макс размер send буфера TCP
+    ["net.ipv4.tcp_max_syn_backlog"]="2048"     # Макс. SYN запросов в очереди
+    ["net.ipv4.tcp_slow_start_after_idle"]="0"  # Отключить slow start после простоя
+    ["net.ipv4.tcp_notsent_lowat"]="16384"      # Мин. размер unsent буфера
+    ["net.ipv4.tcp_fastopen"]="3"               # Включить TCP Fast Open
+    ["net.ipv4.tcp_syncookies"]="1"             # Защита от SYN flood
+    ["net.ipv4.tcp_tw_reuse"]="1"               # Переиспользование TIME-WAIT сокетов
+    ["net.ipv4.tcp_fin_timeout"]="15"           # Таймаут FIN пакетов (15 сек)
+    
+    # Маршрутизация
+    ["net.ipv4.ip_forward"]="1"             # Включить IP forwarding
+    ["net.ipv4.conf.all.forwarding"]="1"    # Включить forwarding для всех интерфейсов
+    ["net.ipv4.conf.default.forwarding"]="1" # Включить forwarding для новых интерфейсов
+    ["net.ipv4.conf.all.src_valid_mark"]="1" # Валидация source mark
 )
 
-for opt in "${KERNEL_OPTS[@]}"; do
-    key="${opt%%=*}"
-    grep -q "^$key=" /etc/sysctl.conf || echo "$opt" >> /etc/sysctl.conf
+# Применяем все оптимизации
+for key in "${!KERNEL_OPTS[@]}"; do
+    value="${KERNEL_OPTS[$key]}"
+    comment=""
+    
+    # Ищем комментарий для этого параметра
+    case "$key" in
+        "vm.swappiness") comment="Баланс использования RAM/swap" ;;
+        "vm.vfs_cache_pressure") comment="Давление на кэш файловой системы" ;;
+        "vm.dirty_background_ratio") comment="Фоновая запись грязных страниц" ;;
+        "vm.dirty_ratio") comment="Максимальный процент грязных страниц" ;;
+        "vm.dirty_expire_centisecs") comment="Время жизни грязных страниц (5 сек)" ;;
+        "vm.dirty_writeback_centisecs") comment="Интервал фоновой записи (1 сек)" ;;
+        "vm.min_free_kbytes") comment="Минимум свободной памяти (64MB)" ;;
+        "vm.overcommit_memory") comment="Разрешить overcommit памяти" ;;
+        "net.core.rmem_max") comment="Макс. размер recv буфера (16MB)" ;;
+        "net.core.wmem_max") comment="Макс. размер send буфера (16MB)" ;;
+        "net.core.somaxconn") comment="Макс. длина очереди подключений" ;;
+        "net.core.netdev_max_backlog") comment="Макс. пакетов в очереди NIC" ;;
+        "net.ipv4.tcp_rmem") comment="TCP recv буфер: мин/деф/макс" ;;
+        "net.ipv4.tcp_wmem") comment="TCP send буфер: мин/деф/макс" ;;
+        "net.ipv4.tcp_max_syn_backlog") comment="Макс. SYN запросов в очереди" ;;
+        "net.ipv4.tcp_slow_start_after_idle") comment="Отключить slow start после простоя" ;;
+        "net.ipv4.tcp_notsent_lowat") comment="Мин. размер unsent буфера" ;;
+        "net.ipv4.tcp_fastopen") comment="Включить TCP Fast Open" ;;
+        "net.ipv4.tcp_syncookies") comment="Защита от SYN flood" ;;
+        "net.ipv4.tcp_tw_reuse") comment="Переиспользование TIME-WAIT сокетов" ;;
+        "net.ipv4.tcp_fin_timeout") comment="Таймаут FIN пакетов (15 сек)" ;;
+        "net.ipv4.ip_forward") comment="Включить IP forwarding" ;;
+        "net.ipv4.conf.all.forwarding") comment="Включить forwarding для всех интерфейсов" ;;
+        "net.ipv4.conf.default.forwarding") comment="Включить forwarding для новых интерфейсов" ;;
+        "net.ipv4.conf.all.src_valid_mark") comment="Валидация source mark" ;;
+    esac
+    
+    apply_sysctl_optimization "$key" "$value" "$comment"
+    print_info "→ $key=$value"
 done
-sysctl -p >/dev/null
-print_success "Все оптимизации ядра применены"
 
-# =============== ШАГ 6: ОТКЛЮЧЕНИЕ НЕНУЖНЫХ СЕРВИСОВ ===============
+# Специальные обработки для разных типов серверов
+TOTAL_MEM_MB=$(free -m | awk '/^Mem:/{print $2}')
+if [ "$TOTAL_MEM_MB" -le 1024 ]; then
+    # Для слабых VPS (≤1GB RAM)
+    apply_sysctl_optimization "vm.swappiness" "60" "Экстремальная экономия RAM для ≤1GB"
+    apply_sysctl_optimization "vm.vfs_cache_pressure" "150" "Агрессивное освобождение кэша"
+    print_info "→ Применены специальные настройки для слабого VPS (≤1GB RAM)"
+elif [ "$TOTAL_MEM_MB" -le 2048 ]; then
+    # Для средних VPS (1-2GB RAM)
+    apply_sysctl_optimization "vm.swappiness" "30" "Оптимизация для 1-2GB RAM"
+    print_info "→ Применены специальные настройки для среднего VPS (1-2GB RAM)"
+fi
+
+print_success "Все оптимизации ядра применены"
+# =============== ШАГ 5: ОТКЛЮЧЕНИЕ НЕНУЖНЫХ СЕРВИСОВ ===============
 print_step "Отключение ненужных сервисов для экономии ресурсов"
 systemctl mask systemd-resolved systemd-networkd NetworkManager \
            snapd apt-daily.service apt-daily-upgrade.service 2>/dev/null
 print_success "Ненужные сервисы отключены"
 
-# =============== ШАГ 7: НАСТРОЙКА SSH ===============
+# =============== ШАГ 6: НАСТРОЙКА SSH ===============
 print_step "Отключение парольной аутентификации SSH"
 cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak.$(date +%s)
 
@@ -356,7 +324,7 @@ else
     print_warning "Служба SSH перезагружена, но статус неактивен. Проверьте конфигурацию."
 fi
 
-# =============== ШАГ 8: НАСТРОЙКА UFW ===============
+# =============== ШАГ 7: НАСТРОЙКА UFW ===============
 print_step "Настройка UFW"
 ufw --force reset >/dev/null 2>&1
 ufw default deny incoming comment 'Запретить входящий трафик'
@@ -367,7 +335,7 @@ ufw allow https comment 'HTTPS'
 ufw --force enable >/dev/null 2>&1
 print_success "UFW включён"
 
-# =============== ШАГ 9: НАСТРОЙКА FAIL2BAN ===============
+# =============== ШАГ 8: НАСТРОЙКА FAIL2BAN ===============
 print_step "Настройка Fail2Ban"
 SSH_PORT=$(grep -Po '^Port \K\d+' /etc/ssh/sshd_config 2>/dev/null || echo 22)
 
