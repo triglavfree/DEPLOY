@@ -17,6 +17,28 @@ print_warning(){ echo -e "${YELLOW}⚠ $1${NC}"; }
 print_error()  { echo -e "${RED}✗ $1${NC}" >&2; exit 1; }
 print_info()   { echo -e "${BLUE}ℹ $1${NC}"; }
 
+# =============== УМНЫЕ ФУНКЦИИ ДЛЯ SYSCTL ===============
+apply_sysctl_optimization() {
+    local key="$1"
+    local value="$2"
+    local comment="$3"
+    
+    # Удаляем все существующие строки с этим ключом (включая комментарии)
+    sed -i "/^[[:space:]]*$key[[:space:]]*=/d" /etc/sysctl.conf
+    
+    # Добавляем новую строку с комментарием
+    if [ -n "$comment" ]; then
+        echo "# $comment" >> /etc/sysctl.conf
+    fi
+    echo "$key=$value" >> /etc/sysctl.conf
+    
+    # Применяем изменение немедленно
+    sysctl -w "$key=$value" >/dev/null 2>&1
+}
+
+# =============== ОПРЕДЕЛЕНИЕ КОРНЕВОГО УСТРОЙСТВА ===============
+ROOT_DEVICE=$(df / --output=source | tail -1 | sed 's/\/dev\///' | sed 's/[0-9]*$//')
+
 # =============== ПРОВЕРКА ===============
 print_step "Проверка прав и ОС"
 if [ "$(id -u)" != "0" ]; then
@@ -40,25 +62,6 @@ DEBIAN_FRONTEND=noninteractive apt-get autoremove -yqq >/dev/null 2>&1
 apt-get clean >/dev/null 2>&1
 print_success "Система обновлена"
 
-# =============== УМНЫЕ ФУНКЦИИ ДЛЯ SYSCTL ===============
-apply_sysctl_optimization() {
-    local key="$1"
-    local value="$2"
-    local comment="$3"
-    
-    # Удаляем все существующие строки с этим ключом (включая комментарии)
-    sed -i "/^[[:space:]]*$key[[:space:]]*=/d" /etc/sysctl.conf
-    
-    # Добавляем новую строку с комментарием
-    if [ -n "$comment" ]; then
-        echo "# $comment" >> /etc/sysctl.conf
-    fi
-    echo "$key=$value" >> /etc/sysctl.conf
-    
-    # Применяем изменение немедленно
-    sysctl -w "$key=$value" >/dev/null 2>&1
-}
-
 # =============== ШАГ 1: УСТАНОВКА ПАКЕТОВ ===============
 print_step "Установка пакетов"
 PACKAGES=("curl" "net-tools" "ufw" "fail2ban" "unzip" "hdparm" "nvme-cli")
@@ -71,16 +74,98 @@ print_success "Пакеты установлены: ${PACKAGES[*]}"
 
 # =============== ШАГ 2: ОПТИМИЗАЦИЯ BBR ===============
 print_step "Включение TCP BBR"
-if ! sysctl net.ipv4.tcp_congestion_control 2>/dev/null | grep -q bbr; then
-    echo 'net.core.default_qdisc=fq' >> /etc/sysctl.conf
-    echo 'net.ipv4.tcp_congestion_control=bbr' >> /etc/sysctl.conf
-    sysctl -p >/dev/null
+CURRENT_BBR=$(sysctl net.ipv4.tcp_congestion_control 2>/dev/null | awk '{print $3}' || echo "")
+
+if [[ "$CURRENT_BBR" != "bbr" ]]; then
+    apply_sysctl_optimization "net.core.default_qdisc" "fq" "Планировщик для BBR"
+    apply_sysctl_optimization "net.ipv4.tcp_congestion_control" "bbr" "TCP BBR congestion control"
     print_success "BBR включён"
 else
     print_warning "BBR уже активен"
 fi
 
-# =============== ШАГ 3: НАСТРОЙКА ВИРТУАЛЬНОЙ ПАМЯТИ (ZRAM или SWAP) ===============
+# =============== ШАГ 3: ОПТИМИЗАЦИЯ ДИСКА ===============
+print_step "Оптимизация диска"
+
+print_info "Корневое устройство: $ROOT_DEVICE"
+
+# === ОПРЕДЕЛЕНИЕ ТИПА ДИСКА ===
+DISK_TYPE="hdd"
+if [[ "$ROOT_DEVICE" == nvme* ]]; then
+    DISK_TYPE="nvme"
+elif [ -f "/sys/block/$ROOT_DEVICE/device/model" ] && grep -qi "nvme" "/sys/block/$ROOT_DEVICE/device/model" 2>/dev/null; then
+    DISK_TYPE="nvme"
+elif [ -f "/sys/block/$ROOT_DEVICE/queue/rotational" ] && [ "$(cat /sys/block/$ROOT_DEVICE/queue/rotational 2>/dev/null)" = "0" ]; then
+    DISK_TYPE="ssd"
+elif [[ "$ROOT_DEVICE" == vda || "$ROOT_DEVICE" == vdb || "$ROOT_DEVICE" == sda || "$ROOT_DEVICE" == sdb ]]; then
+    DISK_TYPE="virtio"
+else
+    DISK_TYPE="hdd"
+fi
+print_info "Определённый тип диска: $DISK_TYPE"
+
+# === 1. НАСТРОЙКА ПЛАНИРОВЩИКА ВВОДА-ВЫВОДА ===
+if [ -f /sys/block/"$ROOT_DEVICE"/queue/scheduler ]; then
+    CURRENT_SCHEDULER=$(cat /sys/block/"$ROOT_DEVICE"/queue/scheduler 2>/dev/null | grep -o '\[.*\]' | tr -d '[]' || echo "unknown")
+    print_info "Текущий планировщик: ${CURRENT_SCHEDULER:-неизвестно}"
+
+    if [[ "$DISK_TYPE" == "nvme" ]]; then
+        TARGET_SCHEDULER="none"
+    elif [[ "$DISK_TYPE" == "virtio" ]]; then
+        TARGET_SCHEDULER="none"
+    elif [[ "$DISK_TYPE" == "ssd" ]]; then
+        TARGET_SCHEDULER="mq-deadline"
+    else
+        TARGET_SCHEDULER="mq-deadline"
+    fi
+
+    if [[ "$CURRENT_SCHEDULER" != "$TARGET_SCHEDULER" ]]; then
+        if echo "$TARGET_SCHEDULER" > /sys/block/"$ROOT_DEVICE"/queue/scheduler 2>/dev/null; then
+            print_success "Планировщик установлен в '$TARGET_SCHEDULER'"
+        else
+            print_warning "Не удалось установить планировщик '$TARGET_SCHEDULER'"
+        fi
+    else
+        print_warning "Планировщик уже оптимизирован: $CURRENT_SCHEDULER"
+    fi
+else
+    if [[ "$DISK_TYPE" == "nvme" ]]; then
+        print_success "NVMe: планировщик не используется (аппаратное управление)"
+    else
+        print_warning "Файл scheduler недоступен (возможно, NVMe или нестандартное устройство)"
+    fi
+fi
+
+# === 2. УПРАВЛЕНИЕ TRIM (discard) ===
+if [[ "$DISK_TYPE" == "nvme" || "$DISK_TYPE" == "ssd" ]]; then
+    if ! grep -q 'discard' /etc/fstab; then
+        if grep -q " / " /etc/fstab; then
+            sed -i '/\/ /s/\(defaults[^,]*\)/\1,discard/' /etc/fstab
+            print_success "TRIM (discard) включён — актуально для SSD/NVMe"
+        else
+            print_warning "Не удалось включить TRIM (корневой раздел не найден в fstab)"
+        fi
+    else
+        print_warning "TRIM (discard) уже включён"
+    fi
+else
+    if grep -q 'discard' /etc/fstab; then
+        sed -i 's/,discard//g; s/discard,//g; s/discard//g' /etc/fstab
+        print_success "TRIM (discard) отключён — не поддерживается для $DISK_TYPE"
+    else
+        print_info "TRIM не применяется для $DISK_TYPE (корректно)"
+    fi
+fi
+
+# === 3. ПРОВЕРКА NVMe (только если NVMe) ===
+if [[ "$DISK_TYPE" == "nvme" ]] && command -v nvme &> /dev/null; then
+    print_info "Проверка состояния NVMe:"
+    nvme smart-log "/dev/$ROOT_DEVICE" 2>/dev/null | grep -E "(critical|temperature|media|wear)" || true
+fi
+
+print_success "Оптимизация диска завершена"
+
+# =============== ШАГ 4: НАСТРОЙКА ВИРТУАЛЬНОЙ ПАМЯТИ (ZRAM или SWAP) ===============
 print_step "Настройка виртуальной памяти (авто-определение)"
 
 TOTAL_MEM_MB=$(free -m | awk '/^Mem:/{print $2}')
@@ -197,7 +282,8 @@ else
         print_warning "Swap уже активен"
     fi
 fi
-# =============== ШАГ 4: УНИВЕРСАЛЬНАЯ ОПТИМИЗАЦИЯ ЯДРА ===============
+
+# =============== ШАГ 5: УНИВЕРСАЛЬНАЯ ОПТИМИЗАЦИЯ ЯДРА ===============
 print_step "Универсальная оптимизация ядра"
 
 # Все параметры в одном месте с комментариями
@@ -274,7 +360,6 @@ for key in "${!KERNEL_OPTS[@]}"; do
 done
 
 # Специальные обработки для разных типов серверов
-TOTAL_MEM_MB=$(free -m | awk '/^Mem:/{print $2}')
 if [ "$TOTAL_MEM_MB" -le 1024 ]; then
     # Для слабых VPS (≤1GB RAM)
     apply_sysctl_optimization "vm.swappiness" "60" "Экстремальная экономия RAM для ≤1GB"
@@ -287,13 +372,14 @@ elif [ "$TOTAL_MEM_MB" -le 2048 ]; then
 fi
 
 print_success "Все оптимизации ядра применены"
-# =============== ШАГ 5: ОТКЛЮЧЕНИЕ НЕНУЖНЫХ СЕРВИСОВ ===============
+
+# =============== ШАГ 6: ОТКЛЮЧЕНИЕ НЕНУЖНЫХ СЕРВИСОВ ===============
 print_step "Отключение ненужных сервисов для экономии ресурсов"
 systemctl mask systemd-resolved systemd-networkd NetworkManager \
            snapd apt-daily.service apt-daily-upgrade.service 2>/dev/null
 print_success "Ненужные сервисы отключены"
 
-# =============== ШАГ 6: НАСТРОЙКА SSH ===============
+# =============== ШАГ 7: НАСТРОЙКА SSH ===============
 print_step "Отключение парольной аутентификации SSH"
 cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak.$(date +%s)
 
@@ -324,7 +410,7 @@ else
     print_warning "Служба SSH перезагружена, но статус неактивен. Проверьте конфигурацию."
 fi
 
-# =============== ШАГ 7: НАСТРОЙКА UFW ===============
+# =============== ШАГ 8: НАСТРОЙКА UFW ===============
 print_step "Настройка UFW"
 ufw --force reset >/dev/null 2>&1
 ufw default deny incoming comment 'Запретить входящий трафик'
@@ -335,7 +421,7 @@ ufw allow https comment 'HTTPS'
 ufw --force enable >/dev/null 2>&1
 print_success "UFW включён"
 
-# =============== ШАГ 8: НАСТРОЙКА FAIL2BAN ===============
+# =============== ШАГ 9: НАСТРОЙКА FAIL2BAN ===============
 print_step "Настройка Fail2Ban"
 SSH_PORT=$(grep -Po '^Port \K\d+' /etc/ssh/sshd_config 2>/dev/null || echo 22)
 
@@ -360,6 +446,7 @@ printf '\033c'
 print_step "ФИНАЛЬНАЯ СВОДКА"
 print_success "Настройка сервера завершена!"
 print_success "Ядро оптимизировано!"
+
 # Основная информация
 EXTERNAL_IP=$(curl -s4 https://api.ipify.org 2>/dev/null || \
               curl -s4 https://ipinfo.io/ip 2>/dev/null || \
@@ -419,3 +506,5 @@ else
     print_warning "UFW: неактивен (защита сети отключена!)"
 fi
 
+print_warning "❗ ВАЖНО: Сохраните приватный ключ /root/.ssh/id_ed25519 и не теряйте его — пароли отключены!"
+print_info "Рекомендуется перезагрузить сервер для применения всех оптимизаций: reboot"
