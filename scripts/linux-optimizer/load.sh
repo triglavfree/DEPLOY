@@ -245,9 +245,7 @@ EOF
 
 systemctl restart fail2ban 2>/dev/null || true
 print_success "Fail2Ban активирован для защиты SSH (порт: $SSH_PORT)"
-
 printf '\033c'  # Самый надежный способ очистки экрана
-
 # =============== ФИНАЛЬНАЯ СВОДКА ===============
 print_step "ФИНАЛЬНАЯ СВОДКА"
 
@@ -299,5 +297,4 @@ else
     print_warning "UFW: неактивен (защита сети отключена!)"
 fi
 
-print_warning "❗ Рекомендуется перезагрузить сервер для применения всех оптимизаций: reboot"
 print_success "Настройка сервера завершена!"
