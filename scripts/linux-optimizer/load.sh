@@ -444,10 +444,21 @@ printf '\033c'
 
 # =============== ФИНАЛЬНАЯ СВОДКА ===============
 print_step "ФИНАЛЬНАЯ СВОДКА"
-print_success "Ядро оптимизировано"
 
 # Основная информация
 print_warning "Сохраните приватный ключ /root/.ssh/id_ed25519 — пароли отключены!"
+
+# Сетевые оптимизации
+BBR_STATUS=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo "неизвестно")
+print_info "BBR: ${BBR_STATUS}"
+
+# Диск
+TRIM_STATUS=$(grep -q 'discard' /etc/fstab 2>/dev/null && echo "включен" || echo "отключен")
+print_info "TRIM для SSD: $TRIM_STATUS"
+SCHEDULER_STATUS=$(cat /sys/block/"$ROOT_DEVICE"/queue/scheduler 2>/dev/null || echo "неизвестно")
+print_info "Планировщик диска: ${SCHEDULER_STATUS:-неизвестно}"
+
+# Внешний IP адрес
 EXTERNAL_IP=$(curl -s4 https://api.ipify.org 2>/dev/null || \
               curl -s4 https://ipinfo.io/ip 2>/dev/null || \
               curl -s4 https://icanhazip.com 2>/dev/null || \
@@ -455,9 +466,9 @@ EXTERNAL_IP=$(curl -s4 https://api.ipify.org 2>/dev/null || \
               echo "не удалось определить")
 print_info "Внешний IP-адрес: ${EXTERNAL_IP}"
 
-# Сетевые оптимизации
-BBR_STATUS=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo "неизвестно")
-print_info "BBR: ${BBR_STATUS}"
+# Безопасность
+print_info "Открытые порты:"
+ss -tuln | grep -E ':(22|80|443)\s' || print_warning "Не найдены ожидаемые порты (22, 80, 443)"
 
 # Виртуальная память
 print_info "Статус виртуальной памяти:"
@@ -490,16 +501,6 @@ else
     fi
 fi
 
-# Диск
-TRIM_STATUS=$(grep -q 'discard' /etc/fstab 2>/dev/null && echo "включен" || echo "отключен")
-print_info "TRIM для SSD: $TRIM_STATUS"
-SCHEDULER_STATUS=$(cat /sys/block/"$ROOT_DEVICE"/queue/scheduler 2>/dev/null || echo "неизвестно")
-print_info "Планировщик диска: ${SCHEDULER_STATUS:-неизвестно}"
-
-# Безопасность
-print_info "Открытые порты:"
-ss -tuln | grep -E ':(22|80|443)\s' || print_warning "Не найдены ожидаемые порты (22, 80, 443)"
-
 SSH_ACCESS=$(ss -tuln | grep ":$SSH_PORT" | grep LISTEN 2>/dev/null || echo "не слушается")
 if [[ "$SSH_ACCESS" != "не слушается" ]]; then
     print_success "SSH сервер слушает порт $SSH_PORT"
@@ -520,5 +521,6 @@ else
     print_warning "UFW: неактивен (защита сети отключена!)"
 fi
 
-print_info "Рекомендуется перезагрузить сервер для применения всех оптимизаций: reboot"
+print_success "Ядро оптимизировано!"
+print_warning "Рекомендуется перезагрузить сервер для применения всех оптимизаций: reboot"
 print_success "Настройка сервера завершена!"
