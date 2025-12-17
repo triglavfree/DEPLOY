@@ -250,10 +250,10 @@ printf '\033c'  # Самый надежный способ очистки экр
 print_step "ФИНАЛЬНАЯ СВОДКА"
 
 # Swap и BBR
+print_info "BBR: ${BBR_STATUS}"
 SWAP_SIZE=$(swapon --show --bytes | awk 'NR==2 {print $3}' 2>/dev/null || echo "неизвестно")
 print_info "Swap: ${SWAP_SIZE:-0} байт активно"
 BBR_STATUS=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo "неизвестно")
-print_info "BBR: ${BBR_STATUS}"
 
 # Статус NVMe/SSD оптимизации
 SCHEDULER_STATUS=$(cat /sys/block/"$ROOT_DEVICE"/queue/scheduler 2>/dev/null || echo "неизвестно")
