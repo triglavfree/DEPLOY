@@ -258,7 +258,8 @@ print_info "Подключайтесь командой:"
 print_info "  ssh -i /путь/к/id_ed25519 root@${EXTERNAL_IP}"
 
 # Статус Fail2Ban
-if systemctl is-active --quiet fail2ban; then
+FAIL2BAN_SERVICE="fail2ban"
+if systemctl is-active --quiet "$FAIL2BAN_SERVICE"; then
     print_success "Fail2Ban: активен"
 else
     print_warning "Fail2Ban: неактивен"
