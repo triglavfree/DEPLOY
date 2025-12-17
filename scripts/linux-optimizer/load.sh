@@ -1,6 +1,5 @@
 #!/bin/bash
 set -e
-
 # =============== ЦВЕТА ===============
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -66,11 +65,23 @@ print_success "Система обновлена"
 print_step "Установка пакетов"
 PACKAGES=("curl" "net-tools" "ufw" "fail2ban" "unzip" "hdparm" "nvme-cli")
 
-print_info "→ Установка ${#PACKAGES[@]} пакетов"
-if ! DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${PACKAGES[@]}" >/dev/null 2>&1; then
-    print_error "Ошибка установки пакетов. Проверьте подключение к интернету."
+INSTALLED_PACKAGES=()
+for pkg in "${PACKAGES[@]}"; do
+    if ! dpkg -l | grep -q "^ii  $pkg "; then
+        if DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$pkg" >/dev/null 2>&1; then
+            INSTALLED_PACKAGES+=("$pkg")
+        fi
+    fi
+done
+
+if [ ${#INSTALLED_PACKAGES[@]} -gt 0 ]; then
+    print_success "Установлено пакетов: ${#INSTALLED_PACKAGES[@]}"
+    for pkg in "${INSTALLED_PACKAGES[@]}"; do
+        print_info "  → $pkg"
+    done
+else
+    print_success "Все пакеты уже установлены"
 fi
-print_success "Пакеты установлены: ${PACKAGES[*]}"
 
 # =============== ШАГ 2: ОПТИМИЗАЦИЯ BBR ===============
 print_step "Включение TCP BBR"
@@ -86,7 +97,6 @@ fi
 
 # =============== ШАГ 3: ОПТИМИЗАЦИЯ ДИСКА ===============
 print_step "Оптимизация диска"
-
 print_info "Корневое устройство: $ROOT_DEVICE"
 
 # === ОПРЕДЕЛЕНИЕ ТИПА ДИСКА ===
@@ -285,7 +295,6 @@ fi
 
 # =============== ШАГ 5: УНИВЕРСАЛЬНАЯ ОПТИМИЗАЦИЯ ЯДРА ===============
 print_step "Универсальная оптимизация ядра"
-
 # Все параметры в одном месте с комментариями
 declare -A KERNEL_OPTS
 KERNEL_OPTS=(
@@ -439,7 +448,6 @@ EOF
 
 systemctl restart fail2ban 2>/dev/null || true
 print_success "Fail2Ban активирован для защиты SSH (порт: $SSH_PORT)"
-
 printf '\033c'
 
 # =============== ФИНАЛЬНАЯ СВОДКА ===============
