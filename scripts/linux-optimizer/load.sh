@@ -43,11 +43,13 @@ print_success "Система обновлена"
 # =============== ШАГ 1: УСТАНОВКА ПАКЕТОВ ===============
 print_step "Установка пакетов"
 PACKAGES=("curl" "net-tools" "ufw" "fail2ban" "unzip" "hdparm" "nvme-cli")
-for pkg in "${PACKAGES[@]}"; do
-    print_info "→ $pkg"
-    DEBIAN_FRONTEND=noninteractive apt-get install -y "$pkg"
-done
-print_success "Пакеты установлены"
+
+print_info "→ Установка ${#PACKAGES[@]} пакетов"
+if ! DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${PACKAGES[@]}" >/dev/null 2>&1; then
+    print_error "Ошибка установки пакетов. Проверьте подключение к интернету."
+fi
+
+print_success "Пакеты установлены: ${PACKAGES[*]}"
 
 # =============== ШАГ 2: ОПТИМИЗАЦИЯ BBR ===============
 print_step "Включение TCP BBR"
@@ -333,6 +335,28 @@ print_info "TRIM для SSD: $TRIM_STATUS"
 SCHEDULER_STATUS=$(cat /sys/block/"$ROOT_DEVICE"/queue/scheduler 2>/dev/null || echo "неизвестно")
 print_info "Планировщик диска: ${SCHEDULER_STATUS:-неизвестно}"
 
+# === СТАТУС ZRAM ===
+print_info "Статус ZRAM:"
+if command -v zramctl &> /dev/null && zramctl | grep -q zram; then
+    print_success "ZRAM: активен (сжатый swap в RAM)"
+    # Выводим детали по каждому zram-устройству
+    while IFS= read -r line; do
+        if [[ "$line" == *"NAME"* ]]; then continue; fi
+        name=$(echo "$line" | awk '{print $1}')
+        algo=$(echo "$line" | awk '{print $2}')
+        compr=$(echo "$line" | awk '{print $3}')
+        total=$(echo "$line" | awk '{print $4}')
+        print_info "  → $name: $compr → $total ($algo)"
+    done < <(zramctl)
+else
+    print_warning "ZRAM: не настроен"
+    print_info "  Рекомендуется для слабых VPS — экономия диска и прирост скорости"
+fi
+
+# Открытые порты
+print_info "Открытые порты:"
+ss -tuln | grep -E ':(22|80|443)\s' || print_warning "Не найдены ожидаемые порты (22, 80, 443)"
+
 # Внешний IP - улучшенная версия с резервными вариантами
 EXTERNAL_IP=$(curl -s4 https://api.ipify.org 2>/dev/null || \
               curl -s4 https://ipinfo.io/ip 2>/dev/null || \
@@ -341,9 +365,8 @@ EXTERNAL_IP=$(curl -s4 https://api.ipify.org 2>/dev/null || \
               echo "не удалось определить")
 print_info "Внешний IP-адрес: ${EXTERNAL_IP}"
 
-# Открытые порты
-print_info "Открытые порты:"
-ss -tuln | grep -E ':(22|80|443)\s' || print_warning "Не найдены ожидаемые порты (22, 80, 443)"
+# Путь к SSH-ключу
+print_info "Приватный SSH-ключ: /root/.ssh/id_ed25519"
 
 # Проверка доступа по SSH после отключения паролей
 SSH_ACCESS=$(ss -tuln | grep ":$SSH_PORT" | grep LISTEN 2>/dev/null || echo "не слушается")
