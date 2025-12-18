@@ -5,7 +5,7 @@
 curl -fsSL https://raw.githubusercontent.com/triglavfree/deploy/main/scripts/linux-optimizer/load.sh | sudo bash
 ```
 ---
-### QWEN-CODE
+### 🧞 QWEN-CODE
 Предварительные требования
 Убедитесь, что у вас установлена ​​версия [Node.js 20](https://nodejs.org/en/download) или выше.
 ```bash
