@@ -313,9 +313,6 @@ if [ -f "/sys/block/$ROOT_DEVICE/queue/scheduler" ]; then
 fi
 print_info "Планировщик диска: ${SCHEDULER_STATUS}"
 
-EXTERNAL_IP=$(curl -s4 https://api.ipify.org 2>/dev/null || echo "не удалось определить")
-print_info "Внешний IP-адрес: ${EXTERNAL_IP}"
-
 # === ЧТО МЫ СДЕЛАЛИ С БРАНДМАУЭРОМ ===
 print_info "Брандмауэр UFW:"
 print_info "  → Все входящие подключения ЗАБЛОКИРОВАНЫ по умолчанию"
@@ -356,6 +353,9 @@ fi
 
 print_success "Оптимизация и защита сервера завершены!"
 
-print_warning ""
-print_warning "Рекомендуется перезагрузить сервер для полного применения настроек:"
-print_warning "   reboot"
+# Сообщение о перезагрузке — ТОЛЬКО если есть восстановительный аккаунт
+if [ -n "$RECOVERY_USER" ] && id "$RECOVERY_USER" >/dev/null 2>&1; then
+    print_warning ""
+    print_warning "Рекомендуется перезагрузить сервер для полного применения настроек:"
+    print_warning "   reboot"
+fi
