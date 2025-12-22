@@ -437,11 +437,9 @@ else
     print_error "UFW: НЕ АКТИВЕН — сервер НЕ защищён брандмауэром!"
 fi
 
-print_success "Оптимизация и защита сервера завершены!"
-
-# Сообщение о перезагрузке — ТОЛЬКО если есть восстановительный аккаунт
-if [ -n "$RECOVERY_USER" ] && id "$RECOVERY_USER" >/dev/null 2>&1; then
-    print_warning ""
-    print_warning "Рекомендуется перезагрузить сервер для полного применения настроек:"
-    print_warning "   reboot"
+if [ -f /var/run/reboot-required ]; then
+    print_warning "⚠ Установлены обновления, требующие перезагрузки!"
+    print_info "   Выполните: reboot"
+else
+    print_success "✓ Оптимизация и защита сервера завершены!"
 fi
