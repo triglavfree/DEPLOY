@@ -123,7 +123,22 @@ DEBIAN_FRONTEND=noninteractive apt-get update -yqq >/dev/null 2>&1 || true
 DEBIAN_FRONTEND=noninteractive apt-get upgrade -yqq --no-install-recommends >/dev/null 2>&1 || true
 DEBIAN_FRONTEND=noninteractive apt-get autoremove -yqq >/dev/null 2>&1 || true
 apt-get clean >/dev/null 2>&1 || true
-print_success "Система обновлена"
+
+# Проверяем, всё ли обновлено
+SYSTEM_UPDATE_STATUS=$(check_if_fully_updated)
+print_success "Система обновлена: $SYSTEM_UPDATE_STATUS"
+
+# Функция: проверить, остались ли пакеты для обновления
+check_if_fully_updated() {
+    # Обновляем список пакетов (тихо)
+    DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null 2>&1 || true
+    # Проверяем, есть ли обновляемые пакеты
+    if apt-get --just-print upgrade | grep -q "^Inst"; then
+        echo "доступны обновления"
+    else
+        echo "актуальна"
+    fi
+}
 
 # =============== УСТАНОВКА ПАКЕТОВ ===============
 print_step "Установка пакетов"
