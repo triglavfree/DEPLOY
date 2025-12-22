@@ -91,8 +91,19 @@ CURRENT_IP="$CLIENT_IP"
 check_ssh_access_safety() {
     print_step "Проверка безопасности SSH доступа"
     
-    if [ "$CURRENT_IP" != "unknown" ]; then
-        print_info "Ваш текущий IP: ${CURRENT_IP}"
+    # Пытаемся определить IP клиента
+    CLIENT_IP=""
+    if [ -n "$SSH_CLIENT" ]; then
+        CLIENT_IP=$(echo "$SSH_CLIENT" | awk '{print $1}')
+    elif [ -n "$SSH_CONNECTION" ]; then
+        CLIENT_IP=$(echo "$SSH_CONNECTION" | awk '{print $1}')
+    fi
+    CURRENT_IP="$CLIENT_IP"
+
+    if [ -n "$CURRENT_IP" ]; then
+        print_info "Ваш IP-адрес (обнаружен автоматически): ${CURRENT_IP}"
+    else
+        print_info "Не удалось определить ваш IP-адрес автоматически."
     fi
     
     if [ -f /root/.ssh/authorized_keys ] && [ -s /root/.ssh/authorized_keys ]; then
@@ -113,28 +124,46 @@ check_ssh_access_safety() {
         echo "Пользователь: $RECOVERY_USER"
         echo "Пароль: $TEMP_PASS"
         echo "Создан: $(date)"
-        [ "$CURRENT_IP" != "unknown" ] && echo "Ваш IP: $CURRENT_IP"
+        [ -n "$CURRENT_IP" ] && echo "Ваш IP: $CURRENT_IP"
     } > "$RECOVERY_FILE"
     chmod 600 "$RECOVERY_FILE"
     
     print_warning "ВНИМАНИЕ: SSH ключи не настроены!"
-    print_warning "Создан аккаунт для восстановления:"
+    print_warning "Создан временный аккаунт для восстановления:"
     print_warning "  Пользователь: ${RECOVERY_USER}"
     print_warning "  Пароль: ${TEMP_PASS}"
-    
     echo
-    read -t 60 -rp "${YELLOW}Продолжить оптимизацию? (y/n) [n]: ${NC}" confirm
+    
+    print_info "🔧 Как настроить SSH-ключи (рекомендуется):"
+    print_info "1. На вашем локальном компьютере (не на сервере!) выполните:"
+    print_info "     ssh-keygen -t ed25519 -C \"your_email@example.com\""
+    print_info "   (нажмите Enter, чтобы принять значения по умолчанию)"
+    echo
+    print_info "2. Скопируйте публичный ключ на сервер:"
+    if [ -n "$CURRENT_IP" ]; then
+        print_info "     ssh-copy-id root@${CURRENT_IP}"
+    else
+        print_info "     # Сначала узнайте публичный IP вашего сервера, затем:"
+        print_info "     ssh-copy-id root@ВАШ_IP_СЕРВЕРА"
+    fi
+    echo
+    print_info "3. Или вручную добавьте ключ:"
+    print_info "     cat ~/.ssh/id_ed25519.pub | ssh root@ВАШ_IP_СЕРВЕРА \\"
+    print_info "         'mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys'"
+    echo
+    print_info "✅ После настройки ключей перезапустите этот скрипт — пароли будут отключены автоматически."
+    echo
+    
+    read -t 60 -rp "${YELLOW}Продолжить оптимизацию БЕЗ ключей? (y/n) [n]: ${NC}" confirm
     confirm=${confirm:-n}
     
     if [[ ! "$confirm" =~ ^[yY]$ ]]; then
-        print_warning "Оптимизация отменена."
+        print_warning "Оптимизация отменена. Настройте SSH-ключи и запустите скрипт снова."
         exit 0
     fi
     
-    print_success "Продолжаем оптимизацию..."
+    print_success "Продолжаем оптимизацию (без SSH-ключей)..."
 }
-
-check_ssh_access_safety
 
 # =============== ПРОВЕРКА ОС ===============
 print_step "Проверка операционной системы"
