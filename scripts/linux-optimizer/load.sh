@@ -179,7 +179,7 @@ print_success "Система обновлена: $SYSTEM_UPDATE_STATUS"
 
 # =============== УСТАНОВКА ПАКЕТОВ ===============
 print_step "Установка пакетов"
-PACKAGES=("curl" "net-tools" "ufw" "fail2ban" "unzip" "hdparm" "nvme-cli" "zram-tools")
+PACKAGES=("curl" "net-tools" "ufw" "fail2ban" "unzip" "hdparm" "nvme-cli")
 
 INSTALLED_PACKAGES=()
 for pkg in "${PACKAGES[@]}"; do
