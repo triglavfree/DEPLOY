@@ -314,6 +314,13 @@ if [ -n "$RECOVERY_USER" ] && id "$RECOVERY_USER" >/dev/null 2>&1; then
     echo
 fi
 
+# Планировщик диска
+SCHEDULER_STATUS="неизвестно"
+if [ -f "/sys/block/$ROOT_DEVICE/queue/scheduler" ]; then
+    SCHEDULER_STATUS=$(cat "/sys/block/$ROOT_DEVICE/queue/scheduler" 2>/dev/null || echo "неизвестно")
+fi
+print_success "Планировщик диска: ${SCHEDULER_STATUS}"
+
 # SSH статус
 if [ -f /root/.ssh/authorized_keys ] && [ -s /root/.ssh/authorized_keys ]; then
     print_success "SSH: пароли отключены (только ключи)"
@@ -321,18 +328,13 @@ else
     print_warning "SSH: пароли ВКЛЮЧЕНЫ (ключей не обнаружено)"
 fi
 
-# Сетевые оптимизации
-BBR_STATUS=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo "неизвестно")
-print_success "BBR: ${BBR_STATUS}"
-
+# оптимизации диска
 TRIM_STATUS=$(grep -q 'discard' /etc/fstab 2>/dev/null && echo "включён" || echo "отключён")
 print_success "TRIM для SSD: $TRIM_STATUS"
 
-SCHEDULER_STATUS="неизвестно"
-if [ -f "/sys/block/$ROOT_DEVICE/queue/scheduler" ]; then
-    SCHEDULER_STATUS=$(cat "/sys/block/$ROOT_DEVICE/queue/scheduler" 2>/dev/null || echo "неизвестно")
-fi
-print_success "Планировщик диска: ${SCHEDULER_STATUS}"
+# BBR статус
+BBR_STATUS=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo "неизвестно")
+print_success "BBR: ${BBR_STATUS}"
 
 # === БРАНДМАУЭР: ЧТО РАЗРЕШЕНО ===
 print_info "Брандмауэр UFW:"
