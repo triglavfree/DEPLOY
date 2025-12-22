@@ -67,67 +67,39 @@ print_step "Определение вашего IP-адреса"
 
 CURRENT_IP=""
 
-# Способ 1: Используем SSH_CONNECTION (самый простой и надежный)
-if [ -n "$SSH_CONNECTION" ]; then
-    CURRENT_IP=$(echo "$SSH_CONNECTION" | awk '{print $1}')
-    print_success "Ваш IP взят из SSH_CONNECTION: $CURRENT_IP"
+# Способ 1: Проверяем последние успешные входы в auth.log
+if [ -f /var/log/auth.log ]; then
+    CURRENT_IP=$(grep 'sshd.*Accepted' /var/log/auth.log 2>/dev/null | tail -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
 fi
 
-# Способ 2: Если не сработало - используем ss (показал 212.74.198.14)
-if [ -z "$CURRENT_IP" ]; then
-    CURRENT_IP=$(ss -tnp 2>/dev/null | grep 'ESTAB.*sshd' | awk '{print $5}' | cut -d: -f1 | head -1)
-    if [ -n "$CURRENT_IP" ]; then
-        print_success "Ваш IP взят из активных соединений: $CURRENT_IP"
-    fi
+# Способ 2: Используем last (последние входы)
+if [ -z "$CURRENT_IP" ] && command -v last &> /dev/null; then
+    CURRENT_IP=$(last -n 5 -i 2>/dev/null | grep -E '([0-9]{1,3}\.){3}[0-9]{1,3}' | awk '{print $3}' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
 fi
 
-# Способ 3: Если все еще пусто - используем who (тоже работает)
-if [ -z "$CURRENT_IP" ]; then
-    CURRENT_IP=$(who -u 2>/dev/null | grep -Eo '\([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\)' | tr -d '()' | head -1)
-    if [ -n "$CURRENT_IP" ]; then
-        print_success "Ваш IP взят из who: $CURRENT_IP"
-    fi
-fi
-
-# Валидация: проверяем, что это действительно IP
+# Способ 3: Самый надежный для sudo-сессий - ручной ввод с инструкцией
 if [ -z "$CURRENT_IP" ] || ! [[ "$CURRENT_IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    CURRENT_IP=""
-    print_info "Не удалось определить ваш IP автоматически."
-    read -rp "${BLUE}Введите ваш публичный IP-адрес (Enter для разрешения SSH всем): ${NC}" MANUAL_IP
+    echo ""
+    print_warning "ВАЖНО: Скрипт запущен через sudo, автоматическое определение IP невозможно"
+    echo ""
+    print_info "Как узнать ваш IP:"
+    print_info "1. Откройте НОВОЕ окно терминала на вашем КОМПЬЮТЕРЕ (не на сервере!)"
+    print_info "2. Выполните одну из команд:"
+    print_info "   curl ifconfig.me"
+    print_info "   curl ipinfo.io/ip"
+    print_info "   curl icanhazip.com"
+    echo ""
+    print_info "3. Скопируйте полученный IP и введите ниже"
+    echo ""
+    read -rp "${BLUE}Введите ваш публичный IP-адрес для доступа по SSH: ${NC}" MANUAL_IP
     
+    # Очистка и валидация
     MANUAL_IP=$(echo "$MANUAL_IP" | tr -d '[:space:]')
-    
     if [ -n "$MANUAL_IP" ] && [[ "$MANUAL_IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         CURRENT_IP="$MANUAL_IP"
         print_success "IP $CURRENT_IP принят."
     else
-        if [ -n "$MANUAL_IP" ]; then
-            print_warning "Введённое значение '$MANUAL_IP' не похоже на IP-адрес."
-        fi
-        print_warning "SSH будет разрешён для всех (небезопасно, но допустимо временно)."
-    fi
-fi
-
-# Если автоматическое определение не сработало
-if [ -z "$CURRENT_IP" ]; then
-    print_info "Не удалось определить ваш IP автоматически."
-    read -rp "${BLUE}Введите ваш публичный IP для доступа по SSH (Enter — разрешить всем): ${NC}" MANUAL_IP
-    
-    # Очищаем ввод от лишних символов
-    MANUAL_IP=$(echo "$MANUAL_IP" | tr -d '[:space:]' | tr -d '\r\n')
-    
-    if [ -n "$MANUAL_IP" ]; then
-        # Простая проверка на формат IP
-        if [[ "$MANUAL_IP" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
-            CURRENT_IP="$MANUAL_IP"
-            print_success "IP $CURRENT_IP принят."
-        else
-            print_warning "Введённое значение '$MANUAL_IP' не похоже на IP-адрес."
-        fi
-    fi
-    
-    if [ -z "$CURRENT_IP" ]; then
-        print_warning "SSH будет разрешён для всех (небезопасно, но допустимо временно)."
+        print_error "Ошибка: введён некорректный IP-адрес. Пожалуйста, перезапустите скрипт с правильным IP."
     fi
 fi
 
