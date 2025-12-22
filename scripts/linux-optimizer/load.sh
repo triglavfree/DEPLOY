@@ -65,24 +65,57 @@ print_success "Резервные копии: $BACKUP_DIR"
 # =============== ОПРЕДЕЛЕНИЕ IP КЛИЕНТА ===============
 print_step "Определение вашего IP-адреса"
 
-# Сначала попробуем получить IP из SSH-сессии (если возможно)
 CLIENT_IP=""
+
+# Попытка 1: из SSH-переменных
 if [ -n "$SSH_CLIENT" ]; then
     CLIENT_IP=$(echo "$SSH_CLIENT" | awk '{print $1}')
 elif [ -n "$SSH_CONNECTION" ]; then
     CLIENT_IP=$(echo "$SSH_CONNECTION" | awk '{print $1}')
 fi
 
-# Если не удалось — спрашиваем вручную
+# Попытка 2: из последнего входа в auth.log (если SSH-переменные не сработали)
 if [ -z "$CLIENT_IP" ] || [ "$CLIENT_IP" = "127.0.0.1" ] || [[ "$CLIENT_IP" == ::* ]]; then
-    print_info "Не удалось автоматически определить ваш IP-адрес."
-    read -rp "${BLUE}Введите ваш публичный IP-адрес (для разрешения SSH): ${NC}" CLIENT_IP
+    if command -v last &> /dev/null; then
+        CLIENT_IP=$(last -n 1 -i | awk 'NR==2 && $1 ~ /^[a-zA-Z]/ {print $3}' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+    fi
+fi
+
+# Валидация IP
+validate_ip() {
+    local ip=$1
+    if [[ $ip =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+        IFS='.' read -r a b c d <<< "$ip"
+        if [ "$a" -le 255 ] && [ "$b" -le 255 ] && [ "$c" -le 255 ] && [ "$d" -le 255 ]; then
+            # Исключаем приватные и служебные диапазоны
+            if ! [[ $ip =~ ^(127\.|10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.) ]]; then
+                return 0
+            fi
+        fi
+    fi
+    return 1
+}
+
+# Запрос IP у пользователя, если не определился
+if [ -z "$CLIENT_IP" ] || ! validate_ip "$CLIENT_IP"; then
+    print_info "Не удалось автоматически определить ваш публичный IP-адрес."
+    print_info "Это нормально, если вы используете веб-консоль или подключаетесь через прокси."
+    echo
+    read -rp "${BLUE}Введите ваш публичный IP-адрес (оставьте пустым для разрешения SSH всем): ${NC}" USER_IP
     
-    # Простая валидация IP
-    if ! [[ "$CLIENT_IP" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
-        print_warning "Некорректный формат IP. Разрешим SSH для всех (небезопасно)!"
+    if [ -n "$USER_IP" ] && validate_ip "$USER_IP"; then
+        CLIENT_IP="$USER_IP"
+        print_success "IP $CLIENT_IP принят."
+    else
+        if [ -n "$USER_IP" ]; then
+            print_warning "IP '$USER_IP' некорректен или приватный. Будет разрешён SSH для всех!"
+        else
+            print_warning "IP не указан. Будет разрешён SSH для всех (небезопасно)!"
+        fi
         CLIENT_IP=""
     fi
+else
+    print_success "Ваш IP определён автоматически: $CLIENT_IP"
 fi
 
 CURRENT_IP="$CLIENT_IP"
