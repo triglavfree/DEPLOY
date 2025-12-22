@@ -77,21 +77,6 @@ fi
 check_ssh_access_safety() {
     print_step "Проверка безопасности SSH доступа"
     
-    # Определяем IP клиента (для информации и UFW позже)
-    CLIENT_IP=""
-    if [ -n "$SSH_CLIENT" ]; then
-        CLIENT_IP=$(echo "$SSH_CLIENT" | awk '{print $1}')
-    elif [ -n "$SSH_CONNECTION" ]; then
-        CLIENT_IP=$(echo "$SSH_CONNECTION" | awk '{print $1}')
-    fi
-    CURRENT_IP="$CLIENT_IP"
-
-    if [ -n "$CURRENT_IP" ]; then
-        print_info "Ваш клиентский IP-адрес: ${CURRENT_IP}"
-    else
-        print_info "Не удалось определить ваш IP автоматически (нормально при использовании KVM/консоли)."
-    fi
-
     # Проверяем наличие действующих SSH-ключей для root
     if [ -f /root/.ssh/authorized_keys ] && [ -s /root/.ssh/authorized_keys ]; then
         # Проверим, что файл содержит хотя бы одну валидную строку ключа (игнорируем комментарии и пустые строки)
@@ -143,6 +128,9 @@ check_ssh_access_safety() {
     print_success "Скрипт завершён. Повторите запуск после настройки SSH-ключей."
     exit 0  # Успешное завершение, но без выполнения опасных действий
 }
+
+# =============== БЕЗОПАСНАЯ ПРОВЕРКА SSH ===============
+check_ssh_access_safety
 
 # =============== ПРОВЕРКА ОС ===============
 print_step "Проверка операционной системы"
