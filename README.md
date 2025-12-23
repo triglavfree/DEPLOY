@@ -16,7 +16,7 @@ curl -qL https://www.npmjs.com/install.sh | sh
 npm install -g @qwen-code/qwen-code@latest
 ```
 
-### WG-EASY
+### 🦂 WG-EASY + Caddy
 ```bash
 curl -fsSL https://raw.githubusercontent.com/triglavfree/deploy/main/scripts/wireguard/install.sh | sudo -E bash
 ```
