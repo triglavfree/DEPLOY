@@ -226,7 +226,7 @@ if ! swapon --show | grep -q '/swapfile'; then
     echo '/swapfile none swap sw 0 0' >> /etc/fstab
     print_success "Swap ${SWAP_SIZE_MB} МБ успешно создан"
 else
-    print_warning "Swap уже активен"
+    print_success "Swap уже активен"
 fi
 
 # =============== ОТКЛЮЧЕНИЕ ПАРОЛЕЙ В SSH ===============
