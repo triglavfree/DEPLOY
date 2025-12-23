@@ -3,18 +3,18 @@
 [![Blitz Panel](https://img.shields.io/badge/Blitz_Panel-2.5.0-f8f9fa?label=⚡%20Blitz%20Panel&labelColor=white&style=for-the-badge)](https://github.com/ReturnFI/Blitz)
 [![Ubuntu](https://img.shields.io/badge/Ubuntu-24.04_LTS-f8f9fa?logo=ubuntu&logoColor=E95420&labelColor=white&style=for-the-badge)](https://releases.ubuntu.com/24.04/)
 
-### Оптимизатор VPS Ubuntu 22
+### Оптимизатор VPS
 ```bash
 curl -fsSL https://raw.githubusercontent.com/triglavfree/deploy/main/scripts/vps/run.sh | sudo -E bash
 ```
 ---
 ### QWEN-CODE
 Предварительные требования
-Убедитесь, что у вас установлена ​​версия [Node.js 20](https://nodejs.org/en/download) или выше.
+Убедитесь, что у вас установлена ​​версия [Node.js 20](https://nodejs.org/en/download) или выше
 ```bash
 curl -qL https://www.npmjs.com/install.sh | sh
 ```
-Установите из npm.
+Установите из `npm`
 ```bash
 npm install -g @qwen-code/qwen-code@latest
 ```
