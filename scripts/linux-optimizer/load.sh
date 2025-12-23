@@ -62,26 +62,29 @@ cp /etc/sysctl.conf "$BACKUP_DIR/" 2>/dev/null || true
 cp /etc/fstab "$BACKUP_DIR/" 2>/dev/null || true
 print_success "Резервные копии: $BACKUP_DIR"
 
-# =============== ОПРЕДЕЛЕНИЕ IP КЛИЕНТА ===============
-print_step "Определение вашего IP-адреса"
-
-CURRENT_IP=""
-
-# Способ 1: Проверяем последние успешные входы в auth.log
-if [ -f /var/log/auth.log ]; then
-    CURRENT_IP=$(grep 'sshd.*Accepted' /var/log/auth.log 2>/dev/null | tail -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-    print_success "IP $CURRENT_IP принят."
-fi
-
 # =============== ПРОВЕРКА SSH ДОСТУПА ===============
 check_ssh_access_safety() {
     print_step "Проверка безопасности SSH доступа"
+    
+    # === ПОЛУЧАЕМ IP КЛИЕНТА НАДЕЖНО ===
+    CURRENT_IP=""
+    if [ -n "$SSH_CLIENT" ]; then
+        CURRENT_IP=$(echo "$SSH_CLIENT" | awk '{print $1}')
+    elif [ -n "$SSH_CONNECTION" ]; then
+        CURRENT_IP=$(echo "$SSH_CONNECTION" | awk '{print $1}')
+    fi
+
+    if [ -n "$CURRENT_IP" ]; then
+        print_info "Ваш IP-адрес: ${CURRENT_IP}"
+    else
+        print_info "Не удалось определить IP автоматически (нормально при использовании консоли провайдера)."
+    fi
     
     # Проверяем наличие действующих SSH-ключей для root
     if [ -f /root/.ssh/authorized_keys ] && [ -s /root/.ssh/authorized_keys ]; then
         # Проверим, что файл содержит хотя бы одну валидную строку ключа (игнорируем комментарии и пустые строки)
         if grep -qE '^(ssh-rsa|ssh-ed25519|ecdsa-sha2-nistp[0-9]+)' /root/.ssh/authorized_keys; then
-            print_success "✅ Обнаружены действующие SSH-ключи для root."
+            print_success "Обнаружены действующие SSH-ключи для root."
 
             # Удаляем все временные recovery-аккаунты, если они остались
             for user in $(getent passwd | awk -F: '/^recovery_user_[0-9]+/ {print $1}'); do
@@ -438,8 +441,8 @@ else
 fi
 
 if [ -f /var/run/reboot-required ]; then
-    print_warning "⚠ Установлены обновления, требующие перезагрузки!"
+    print_warning "Установлены обновления, требующие перезагрузки "
     print_info "   Выполните: reboot"
 else
-    print_success "✓ Оптимизация и защита сервера завершены!"
+    print_success "Оптимизация и защита сервера завершены!"
 fi
