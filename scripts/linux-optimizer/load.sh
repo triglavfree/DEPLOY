@@ -340,9 +340,4 @@ else
     print_success "Оптимизация и защита сервера завершены!"
 fi
 
-# =============== ОЧИСТКА ВРЕМЕННЫХ ФАЙЛОВ ===============
-if [ -d "$BACKUP_DIR" ]; then
-    rm -rf /root/backup_2025* 2>/dev/null || true
-    print_info "Все резервные копии скрипта удалены."
-fi
-
+rm -rf /root/backup_2025* 2>/dev/null || true
