@@ -342,6 +342,7 @@ fi
 
 # =============== ОЧИСТКА ВРЕМЕННЫХ ФАЙЛОВ ===============
 if [ -d "$BACKUP_DIR" ]; then
-    rm -rf "$BACKUP_DIR"
-    print_info "Временные резервные копии удалены: $BACKUP_DIR"
+    rm -rf "$BACKUP_DIR" 2>/dev/null
+    print_info "Резервные копии удалены."
 fi
+
