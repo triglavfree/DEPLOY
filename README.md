@@ -1,6 +1,6 @@
 
 
-### ☯️ Оптимизатор VPS Ubuntu 22
+### 🪬 Оптимизатор VPS Ubuntu 22
 ```bash
 curl -fsSL https://raw.githubusercontent.com/triglavfree/deploy/main/scripts/linux-optimizer/load.sh | sudo -E bash
 ```
