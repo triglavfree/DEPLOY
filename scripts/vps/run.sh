@@ -4,7 +4,7 @@ set -e
 # =============== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===============
 RECOVERY_USER=""
 RECOVERY_FILE="/root/recovery_info.txt"
-SERVER_IP=$(curl -s https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')
+SERVER_IP=
 CURRENT_IP="unknown"
 
 # =============== ЦВЕТА ===============
@@ -199,7 +199,10 @@ check_ssh_access_safety() {
         print_info "     ssh-copy-id root@${CURRENT_IP}"
     else
         print_info "     # Узнайте IP сервера и выполните:"
-        print_info "     ssh-copy-id root@${SERVER_IP}"
+        if [ -z "$SSH_CLIENT" ]; then
+        EXTERNAL_IP=$(curl -s https://api.ipify.org 2>/dev/null || echo "ВАШ_IP_СЕРВЕРА")
+        print_info "Внешний IP сервера: $EXTERNAL_IP"
+    fi
 
     fi
     echo
