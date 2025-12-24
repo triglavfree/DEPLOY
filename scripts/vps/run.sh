@@ -381,7 +381,11 @@ print_success "ОС: $PRETTY_NAME ($SYSTEM_UPDATE_STATUS)"
 print_success "Планировщик диска: $(cat "/sys/block/$ROOT_DEVICE/queue/scheduler" 2>/dev/null || echo "неизвестно")"
 print_success "SSH: пароли отключены (только ключи)"
 print_success "TRIM для SSD: $(grep -q 'discard' /etc/fstab && echo "включён" || echo "отключён")"
-print_success "BBR: $(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo "неизвестно")"
+
+# BBR
+QDISC=$(sysctl -n net.core.default_qdisc 2>/dev/null || echo "неизвестно")
+BBR=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo "неизвестно")
+print_success "Сетевой стек: qdisc=$QDISC, BBR=$BBR"
 
 if [ -z "$SSH_CLIENT" ]; then
     EXTERNAL_IP=$(curl -s https://api.ipify.org   2>/dev/null || echo "неизвестен")
