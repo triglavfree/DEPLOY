@@ -126,16 +126,21 @@ EOF
             print_warning "Оптимизации применены, но BBR не активен. Проверьте: modprobe tcp_bbr"
         fi
     else
-        print_info "Максимальные оптимизации ядра уже настроены"
-        # На всякий случай убедимся, что модуль загружен
-        if ! lsmod | grep -q "tcp_bbr"; then
-            if modprobe tcp_bbr 2>/dev/null; then
-                echo "tcp_bbr" > /etc/modules-load.d/tcp-bbr.conf
-                sysctl -p "$config_file" >/dev/null 2>&1
-                print_info "Модуль tcp_bbr был загружен дополнительно"
-            fi
+    print_info "Максимальные оптимизации ядра уже настроены"
+    if ! lsmod | grep -q "tcp_bbr"; then
+        if modprobe tcp_bbr 2>/dev/null; then
+            echo "tcp_bbr" > /etc/modules-load.d/tcp-bbr.conf
+            # Важно: повторно применить sysctl, чтобы bbr заработал
+            sysctl -p "$config_file" >/dev/null 2>&1
+            print_info "Модуль tcp_bbr загружен и настройки применены"
+        fi
+    else
+        # Убедимся, что bbr активен (на случай, если sysctl не сработал ранее)
+        if ! sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null | grep -q "^bbr$"; then
+            sysctl -w net.ipv4.tcp_congestion_control=bbr >/dev/null 2>&1
         fi
     fi
+fi
 }
 
 # =============== ОПРЕДЕЛЕНИЕ КОРНЕВОГО УСТРОЙСТВА ===============
