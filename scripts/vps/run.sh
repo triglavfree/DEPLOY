@@ -360,6 +360,10 @@ else
     print_info "  → SSH ($SSH_PORT) разрешён для всех"
 fi
 
+# Очистка старых резервных копий (оставляем только последнюю)
+find /root -maxdepth 1 -name "backup_20*" -type d | sort -r | tail -n +2 | xargs rm -rf 2>/dev/null || true
+print_info "Старые резервные копии удалены. Последняя копия сохранена."
+
 # Swap
 if [ -f /swapfile ] && swapon --show | grep -q '/swapfile'; then
     SWAP_BYTES=$(stat -c %s /swapfile 2>/dev/null || stat -f %z /swapfile 2>/dev/null)
@@ -394,10 +398,6 @@ if ufw status | grep -qi "Status: active"; then
 else
     print_error "UFW: НЕ АКТИВЕН"
 fi
-
-# Очистка старых резервных копий (оставляем только последнюю)
-find /root -maxdepth 1 -name "backup_20*" -type d | sort -r | tail -n +2 | xargs rm -rf 2>/dev/null || true
-print_info "Старые резервные копии удалены. Последняя копия сохранена."
 
 # Перезагрузка?
 if [ -f /var/run/reboot-required ]; then
