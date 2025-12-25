@@ -9,8 +9,7 @@ curl -fsSL https://raw.githubusercontent.com/triglavfree/deploy/main/scripts/vps
 ```
 ---
 ### QWEN-CODE
-Предварительные требования
-Убедитесь, что у вас установлена ​​версия [Node.js 20](https://nodejs.org/en/download) или выше
+Убедитесь, что у вас установлена ​​версия [Node.js](https://nodejs.org/en/download) или выше
 ```bash
 curl -qL https://www.npmjs.com/install.sh | sh
 ```
@@ -45,6 +44,14 @@ nano ~/.qwen/settings.json
 ```
 
 </details>
+
+---
+### n8n
+
+Попробуйте n8n мгновенно с помощью [npx](https://docs.n8n.io/hosting/installation/npm/#try-n8n-with-npx) (требуется [Node.js](https://nodejs.org/en/download) ):
+```bash
+npx n8n
+```
 
 ---
 ### WG-EASY + Caddy
