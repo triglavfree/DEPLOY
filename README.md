@@ -20,11 +20,11 @@ npm install -g @qwen-code/qwen-code@latest
 <details>
 <summary> добавить MCP сервер Context7</summary>
 
-- Откройте файл настроек Qwen Coder. Он находится в `~/.qwen/settings.json`
+Откройте файл настроек Qwen Coder. Он находится в `~/.qwen/settings.json`
 ```bash
 nano ~/.qwen/settings.json
 ```
-- Добавьте в него конфигурацию для Context7:
+Добавьте в него конфигурацию для Context7:
 ```json
 {
   "mcpServers": {
