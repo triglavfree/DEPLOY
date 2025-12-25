@@ -9,6 +9,7 @@ curl -fsSL https://raw.githubusercontent.com/triglavfree/deploy/main/scripts/vps
 ```
 ---
 ### QWEN-CODE
+
 Убедитесь, что у вас установлена ​​версия [Node.js](https://nodejs.org/en/download) или выше
 ```bash
 curl -qL https://www.npmjs.com/install.sh | sh
@@ -19,7 +20,7 @@ npm install -g @qwen-code/qwen-code@latest
 ```
 <details>
 <summary> добавить MCP сервер Context7</summary>
-
+  
 Откройте файл настроек Qwen Coder. Он находится в `~/.qwen/settings.json`
 ```bash
 nano ~/.qwen/settings.json
@@ -38,7 +39,7 @@ nano ~/.qwen/settings.json
   }
 }
 ```
-- В консоли QWEN-CODE выполните
+В консоли QWEN-CODE выполните
 ```bash
  /mcp list
 ```
