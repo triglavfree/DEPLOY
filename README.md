@@ -5,7 +5,7 @@
 [![n8n](https://img.shields.io/badge/n8n-v2.1.4-f8f9fa?logo=n8n&logoColor=000000&labelColor=white&style=for-the-badge)](https://github.com/n8n-io/n8n)
 
 
-
+Субдомены [DUCK DNS](https://duckdns.org)  [Free DNS](https://freedns.afraid.org/) [NO IP](https://www.noip.com/)
 ### Оптимизатор VPS
 ```bash
 curl -fsSL https://raw.githubusercontent.com/triglavfree/deploy/main/scripts/vps/run.sh | sudo -E bash
