@@ -4,7 +4,7 @@
 [![Ubuntu](https://img.shields.io/badge/Ubuntu-24.04_LTS-f8f9fa?logo=ubuntu&logoColor=E95420&labelColor=white&style=for-the-badge)](https://releases.ubuntu.com/24.04/)
 [![n8n](https://img.shields.io/github/v/release/n8n-io/n8n?logo=n8n&logoColor=000000&label=n8n&labelColor=white&color=f8f9fa&style=for-the-badge)](https://github.com/n8n-io/n8n)
 [![3x-ui](https://img.shields.io/github/v/release/MHSanaei/3x-ui?logo=xray&logoColor=000000&label=3x-ui&labelColor=white&color=f8f9fa&style=for-the-badge)](https://github.com/MHSanaei/3x-ui)
-[![eGamesAPI](https://img.shields.io/github/v/tag/eGamesAPI/remnawave-reverse-proxy?label=Remnawave&labelColor=white&color=f8f9fa&style=for-the-badge)](https://github.com/eGamesAPI/remnawave-reverse-proxy)
+[![eGamesAPI](https://img.shields.io/github/v/tag/eGamesAPI/remnawave-reverse-proxy?label=eGamesAPI&labelColor=white&color=f8f9fa&style=for-the-badge)](https://github.com/eGamesAPI/remnawave-reverse-proxy)
 
 
 Субдомены [DUCK DNS](https://duckdns.org)  [FreeDNS](https://freedns.afraid.org/) [NO-IP](https://www.noip.com/)
