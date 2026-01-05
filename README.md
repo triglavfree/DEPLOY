@@ -1,9 +1,9 @@
-[![wg-easy](https://img.shields.io/badge/wg--easy-v15.1.0-f8f9fa?logo=wireguard&logoColor=e74c3c&labelColor=white&style=for-the-badge)](https://github.com/wg-easy/wg-easy)
-[![Qwen Code](https://img.shields.io/badge/Qwen_Code-v0.5.2-f8f9fa?logo=github-copilot&logoColor=007ACC&labelColor=white&style=for-the-badge)](https://github.com/QwenLM/qwen-code)
-[![Blitz Panel](https://img.shields.io/badge/Blitz_Panel-2.5.0-f8f9fa?label=⚡%20Blitz%20Panel&labelColor=white&style=for-the-badge)](https://github.com/ReturnFI/Blitz)
+[![wg-easy](https://img.shields.io/github/v/release/wg-easy/wg-easy?logo=wireguard&logoColor=e74c3c&label=wg-easy&labelColor=white&color=f8f9fa&style=for-the-badge)](https://github.com/wg-easy/wg-easy)
+[![Qwen Code](https://img.shields.io/github/v/release/QwenLM/qwen-code?include_prereleases=false&logo=github-copilot&logoColor=007ACC&label=Qwen_Code&labelColor=white&color=f8f9fa&style=for-the-badge)](https://github.com/QwenLM/qwen-code)
+[![Blitz Panel](https://img.shields.io/github/v/release/ReturnFI/Blitz?label=%E2%9A%A1%20Blitz%20Panel&labelColor=white&color=f8f9fa&style=for-the-badge)](https://github.com/ReturnFI/Blitz)
 [![Ubuntu](https://img.shields.io/badge/Ubuntu-24.04_LTS-f8f9fa?logo=ubuntu&logoColor=E95420&labelColor=white&style=for-the-badge)](https://releases.ubuntu.com/24.04/)
-[![n8n](https://img.shields.io/badge/n8n-v2.1.4-f8f9fa?logo=n8n&logoColor=000000&labelColor=white&style=for-the-badge)](https://github.com/n8n-io/n8n)
-[![3x-ui](https://img.shields.io/badge/3x--ui-v2.8.6-f8f9fa?logo=grafana&logoColor=orange&labelColor=white&style=for-the-badge)](https://github.com/MHSanaei/3x-ui)
+[![n8n](https://img.shields.io/github/v/release/n8n-io/n8n?logo=n8n&logoColor=000000&label=n8n&labelColor=white&color=f8f9fa&style=for-the-badge)](https://github.com/n8n-io/n8n)
+[![3x-ui](https://img.shields.io/github/v/release/MHSanaei/3x-ui?logo=xray&logoColor=000000&label=3x-ui&labelColor=white&color=f8f9fa&style=for-the-badge)](https://github.com/MHSanaei/3x-ui)
 
 
 Субдомены [DUCK DNS](https://duckdns.org)  [FreeDNS](https://freedns.afraid.org/) [NO-IP](https://www.noip.com/)
