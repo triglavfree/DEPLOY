@@ -56,7 +56,6 @@ nano ~/.qwen/settings.json
 ```bash
 npx n8n
 ```
-
 ---
 ### WireGuard Easy + Caddy
 ```bash
@@ -67,9 +66,13 @@ curl -fsSL https://raw.githubusercontent.com/triglavfree/deploy/main/scripts/wir
 ```bash
 bash <(curl https://raw.githubusercontent.com/ReturnFI/Blitz/main/install.sh)
 ```
-
 ### 3X-UI
 ```bash
 bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh)
 ```
+### EAGAMES Remnawave Revers-Proxy
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh)
+```
+
 ---
