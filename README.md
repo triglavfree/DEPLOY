@@ -70,7 +70,7 @@ bash <(curl https://raw.githubusercontent.com/ReturnFI/Blitz/main/install.sh)
 ```bash
 bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh)
 ```
-### EAGAMES Remnawave Revers-Proxy
+### eGamesAPI Remnawave Revers-Proxy
 ```bash
 bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh)
 ```
