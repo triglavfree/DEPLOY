@@ -59,7 +59,7 @@ nano ~/.qwen/settings.json
 npx n8n
 ```
 ---
-### HIDDIFY
+### Hiddify-Manager
 ```bash
 bash <(curl https://i.hiddify.com/release)
 ```
