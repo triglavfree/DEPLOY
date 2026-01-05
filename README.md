@@ -5,7 +5,7 @@
 [![n8n](https://img.shields.io/github/v/release/n8n-io/n8n?logo=n8n&logoColor=000000&label=n8n&labelColor=white&color=f8f9fa&style=for-the-badge)](https://github.com/n8n-io/n8n)
 [![3x-ui](https://img.shields.io/github/v/release/MHSanaei/3x-ui?logo=xray&logoColor=000000&label=3x-ui&labelColor=white&color=f8f9fa&style=for-the-badge)](https://github.com/MHSanaei/3x-ui)
 [![eGamesAPI](https://img.shields.io/github/v/tag/eGamesAPI/remnawave-reverse-proxy?label=eGamesAPI&labelColor=white&color=f8f9fa&style=for-the-badge)](https://github.com/eGamesAPI/remnawave-reverse-proxy)
-
+[![Perplexica](https://img.shields.io/github/v/release/ItzCrazyKns/Perplexica?logo=next.js&logoColor=000000&label=Perplexica&labelColor=white&color=f8f9fa&style=for-the-badge)](https://github.com/ItzCrazyKns/Perplexica)
 
 Субдомены [DUCK DNS](https://duckdns.org)  [FreeDNS](https://freedns.afraid.org/) [NO-IP](https://www.noip.com/)
 ### Оптимизатор VPS
