@@ -6,6 +6,7 @@
 [![3x-ui](https://img.shields.io/github/v/release/MHSanaei/3x-ui?logo=xray&logoColor=000000&label=3x-ui&labelColor=white&color=f8f9fa&style=for-the-badge)](https://github.com/MHSanaei/3x-ui)
 [![eGamesAPI](https://img.shields.io/github/v/tag/eGamesAPI/remnawave-reverse-proxy?label=eGamesAPI&labelColor=white&color=f8f9fa&style=for-the-badge)](https://github.com/eGamesAPI/remnawave-reverse-proxy)
 [![Perplexica](https://img.shields.io/github/v/release/ItzCrazyKns/Perplexica?logo=next.js&logoColor=000000&label=Perplexica&labelColor=white&color=f8f9fa&style=for-the-badge)](https://github.com/ItzCrazyKns/Perplexica)
+[![Hiddify-Manager](https://img.shields.io/github/v/release/hiddify/Hiddify-Manager?logo=linux&logoColor=white&label=Hiddify-Manager&labelColor=white&color=f8f9fa&style=for-the-badge)](https://github.com/hiddify/Hiddify-Manager)
 
 Субдомены [DUCK DNS](https://duckdns.org)  [FreeDNS](https://freedns.afraid.org/) [NO-IP](https://www.noip.com/)
 ### Оптимизатор VPS
@@ -58,6 +59,11 @@ nano ~/.qwen/settings.json
 npx n8n
 ```
 ---
+### HIDDIFY
+```bash
+bash <(curl https://i.hiddify.com/release)
+```
+---
 ### WireGuard Easy + Caddy
 ```bash
 curl -fsSL https://raw.githubusercontent.com/triglavfree/deploy/main/scripts/wireguard/install.sh | sudo -E bash
@@ -67,14 +73,17 @@ curl -fsSL https://raw.githubusercontent.com/triglavfree/deploy/main/scripts/wir
 ```bash
 bash <(curl https://raw.githubusercontent.com/ReturnFI/Blitz/main/install.sh)
 ```
+---
 ### 3X-UI
 ```bash
 bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh)
 ```
+---
 ### eGamesAPI Remnawave Revers-Proxy
 ```bash
 bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh)
 ```
+---
 ### Perplexica
 ```bash
 docker run -d -p 3000:3000 -v perplexica-data:/home/perplexica/data --name perplexica itzcrazykns1337/perplexica:latest
