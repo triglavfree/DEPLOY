@@ -51,7 +51,6 @@ nano ~/.qwen/settings.json
 
 ---
 ### n8n
-
 Попробуйте n8n мгновенно с помощью [npx](https://docs.n8n.io/hosting/installation/npm/#try-n8n-with-npx) (требуется [Node.js](https://nodejs.org/en/download) ):
 ```bash
 npx n8n
@@ -64,8 +63,12 @@ curl -fsSL https://raw.githubusercontent.com/triglavfree/deploy/main/scripts/wir
 ```
 ---
 ### Blitz Panel - Hysteria2
-
 ```bash
 bash <(curl https://raw.githubusercontent.com/ReturnFI/Blitz/main/install.sh)
+```
+
+### 3X-UI
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh)
 ```
 ---
