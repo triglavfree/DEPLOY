@@ -34,11 +34,20 @@ nano ~/.qwen/settings.json
 Добавьте в него конфигурацию для Context7:
 ```json
 {
+  "security": {
+    "auth": {
+      "selectedType": "qwen-oauth"
+    }
+  },
+  "$version": 2,
+  "general": {
+    "language": "ru"
+  },
   "mcpServers": {
     "context7": {
       "httpUrl": "https://mcp.context7.com/mcp",
       "headers": {
-        "CONTEXT7_API_KEY": "YOUR_API_KEY",
+        "CONTEXT7_API_KEY": "ваш_реальный_api_ключ",
         "Accept": "application/json, text/event-stream"
       }
     }
