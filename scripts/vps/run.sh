@@ -197,6 +197,7 @@ check_ssh_access_safety() {
     echo
     print_info "2. Нет ключа? Создайте:"
     print_info "     ssh-keygen -t ed25519 -C \"ваш_email@example.com\""
+    echo
     print_info "3. Вручную: добавьте содержимое .pub в /root/.ssh/authorized_keys"
     print_info "   и выполните: chmod 700 /root/.ssh && chmod 600 /root/.ssh/authorized_keys"
     echo
