@@ -440,20 +440,22 @@ fi
 # =============== УСТАНОВКА ГЛОБАЛЬНЫХ NPM ПАКЕТОВ ===============
 print_step "Установка глобальных npm пакетов"
 
-# n8n
+# Установка n8n
 if ! command -v n8n >/dev/null 2>&1; then
+    print_info "→ Установка n8n..."
     npm install -g n8n >/dev/null 2>&1
     print_success "n8n установлен: $(n8n --version)"
 else
-    print_info "n8n уже установлен — пропускаем"
+    print_info "→ n8n уже установлен — пропускаем"
 fi
 
-# qwen-code
+# Установка qwen-code
 if ! command -v qwen-code >/dev/null 2>&1; then
+    print_info "→ Установка qwen-code..."
     npm install -g @qwen-code/qwen-code@latest >/dev/null 2>&1
     print_success "qwen-code установлен"
 else
-    print_info "qwen-code уже установлен — пропускаем"
+    print_info "→ qwen-code уже установлен — пропускаем"
 fi
 
 # =============== НАСТРОЙКА QWEN-CODE С MCP SERVER CONTEXT7 ===============
