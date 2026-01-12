@@ -406,10 +406,10 @@ else
 fi
 
 # Открываем порты для сервисов
-ufw allow 80 comment "HTTP (Let's Encrypt + Nginx)" >/dev/null 2>&1
-ufw allow 443 comment "HTTPS" >/dev/null 2>&1
-ufw allow 5678 comment "n8n" >/dev/null 2>&1
-ufw allow 8443 comment "VS Code Server" >/dev/null 2>&1
+ufw allow 80
+ufw allow 443
+ufw allow 5678
+ufw allow 8443
 
 ufw --force enable >/dev/null 2>&1
 print_success "UFW активирован"
@@ -422,37 +422,62 @@ SSH_CONFIG_BACKUP="/etc/ssh/sshd_config.before_disable_passwords"
 # Создаём резервную копию ТОЛЬКО если её нет
 if [ ! -f "$SSH_CONFIG_BACKUP" ]; then
     print_info "→ Создание резервной копии SSH-конфигурации..."
-    cp /etc/ssh/sshd_config "$SSH_CONFIG_BACKUP"
+    if ! cp /etc/ssh/sshd_config "$SSH_CONFIG_BACKUP"; then
+        print_error "Не удалось создать резервную копию SSH-конфигурации!"
+        exit 1
+    fi
 fi
 
 # Отключаем пароли (только если ещё не отключены)
 if ! grep -q "^PasswordAuthentication no" /etc/ssh/sshd_config; then
     print_info "→ Отключение паролей в SSH..."
-    sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
-    sed -i 's/^#\?ChallengeResponseAuthentication.*/ChallengeResponseAuthentication no/' /etc/ssh/sshd_config
     
-    # Проверяем конфигурацию
-    if sshd -t; then
-        SSH_SERVICE="ssh"
-        if systemctl list-unit-files --quiet | grep -q '^sshd\.service'; then
-            SSH_SERVICE="sshd"
-        fi
-        
-        # Перезагружаем сервис
-        if systemctl reload "$SSH_SERVICE" 2>/dev/null || systemctl restart "$SSH_SERVICE"; then
-            sleep 2
-            if systemctl is-active --quiet "$SSH_SERVICE"; then
-                print_success "Пароли в SSH отключены. Доступ — только по ключу!"
-            else
-                print_error "SSH не активен после перезагрузки!"
-                exit 1
-            fi
-        else
-            print_error "Не удалось перезагрузить SSH-сервис!"
-            exit 1
-        fi
+    # Делаем изменения без перенаправления ошибок
+    if ! sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config; then
+        print_error "Не удалось изменить PasswordAuthentication в sshd_config!"
+        exit 1
+    fi
+    
+    if ! sed -i 's/^#\?ChallengeResponseAuthentication.*/ChallengeResponseAuthentication no/' /etc/ssh/sshd_config; then
+        print_error "Не удалось изменить ChallengeResponseAuthentication в sshd_config!"
+        exit 1
+    fi
+    
+    # Проверяем конфигурацию БЕЗ перенаправления в /dev/null
+    print_info "→ Проверка конфигурации SSH..."
+    if ! sshd -t; then
+        print_error "Ошибка в конфигурации SSH! Восстанавливаем оригинальную конфигурацию..."
+        cp "$SSH_CONFIG_BACKUP" /etc/ssh/sshd_config
+        exit 1
+    fi
+    
+    # Определяем имя сервиса
+    SSH_SERVICE="ssh"
+    if systemctl list-unit-files --quiet | grep -q '^sshd\.service'; then
+        SSH_SERVICE="sshd"
+    fi
+    
+    print_info "→ Перезагрузка SSH-сервиса ($SSH_SERVICE)..."
+    
+    # Пытаемся перезагрузить с выводом ошибок
+    if ! systemctl reload "$SSH_SERVICE" 2>&1 && ! systemctl restart "$SSH_SERVICE" 2>&1; then
+        print_error "Не удалось перезагрузить SSH-сервис $SSH_SERVICE!"
+        print_info "→ Восстанавливаем оригинальную конфигурацию..."
+        cp "$SSH_CONFIG_BACKUP" /etc/ssh/sshd_config
+        # Пробуем восстановить сервис
+        systemctl restart "$SSH_SERVICE" 2>/dev/null || true
+        exit 1
+    fi
+    
+    # Ждём и проверяем статус
+    sleep 2
+    if systemctl is-active --quiet "$SSH_SERVICE"; then
+        print_success "Пароли в SSH отключены. Доступ — только по ключу!"
     else
-        print_error "Ошибка в конфигурации SSH!"
+        print_error "SSH-сервис не активен после перезагрузки!"
+        print_info "→ Восстанавливаем оригинальную конфигурацию..."
+        cp "$SSH_CONFIG_BACKUP" /etc/ssh/sshd_config
+        systemctl restart "$SSH_SERVICE" 2>/dev/null || true
         exit 1
     fi
 else
