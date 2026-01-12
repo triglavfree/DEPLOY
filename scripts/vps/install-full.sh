@@ -584,40 +584,46 @@ else
 fi
 # =============== УСТАНОВКА 3X-UI ===============
 print_step "Установка 3x-ui"
-XUI_SERVICE="/etc/systemd/system/x-ui.service"
-if [ ! -f "$XUI_SERVICE" ]; then
-    bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh)
 
-    if [ -f /usr/local/x-ui/x-ui ]; then
-        WEBBASEPATH=$(gen_random_string 15)
-        USERNAME=$(gen_random_string 10)
-        PASSWORD=$(gen_random_string 10)
+# Останавливаем Nginx, чтобы освободить порт 80 для ACME challenge
+systemctl stop nginx
+
+# Устанавливаем 3x-ui
+bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh)
+
+# Настройка 3x-ui (генерация случайных данных)
+if [ -f /usr/local/x-ui/x-ui ]; then
+    WEBBASEPATH=$(gen_random_string 15)
+    USERNAME=$(gen_random_string 10)
+    PASSWORD=$(gen_random_string 10)
+    PORT=$(shuf -i 1024-62000 -n 1)
+
+    while ! check_port_available "$PORT"; do
         PORT=$(shuf -i 1024-62000 -n 1)
+    done
 
-        while ! check_port_available "$PORT"; do
-            PORT=$(shuf -i 1024-62000 -n 1)
-        done
+    /usr/local/x-ui/x-ui setting -username "$USERNAME" -password "$PASSWORD" -port "$PORT" -webBasePath "$WEBBASEPATH" >/dev/null 2>&1
+    systemctl restart x-ui
 
-        /usr/local/x-ui/x-ui setting -username "$USERNAME" -password "$PASSWORD" -port "$PORT" -webBasePath "$WEBBASEPATH" >/dev/null 2>&1
-        systemctl restart x-ui
+    echo "3XUI_CREDENTIALS" > /root/.3xui_credentials
+    echo "URL: http://$EXTERNAL_IP:$PORT/$WEBBASEPATH" >> /root/.3xui_credentials
+    echo "Логин: $USERNAME" >> /root/.3xui_credentials
+    echo "Пароль: $PASSWORD" >> /root/.3xui_credentials
+    echo "Порт: $PORT" >> /root/.3xui_credentials
+    echo "WebBasePath: $WEBBASEPATH" >> /root/.3xui_credentials
+    chmod 600 /root/.3xui_credentials
 
-        echo "3XUI_CREDENTIALS" > /root/.3xui_credentials
-        echo "URL: http://$EXTERNAL_IP:$PORT/$WEBBASEPATH" >> /root/.3xui_credentials
-        echo "Логин: $USERNAME" >> /root/.3xui_credentials
-        echo "Пароль: $PASSWORD" >> /root/.3xui_credentials
-        echo "Порт: $PORT" >> /root/.3xui_credentials
-        echo "WebBasePath: $WEBBASEPATH" >> /root/.3xui_credentials
-        chmod 600 /root/.3xui_credentials
-
-        print_success "3x-ui установлен и настроен"
-        print_info "Данные доступа сохранены в: /root/.3xui_credentials"
-    else
-        print_error "Установка 3x-ui не удалась"
-        exit 1
-    fi
+    print_success "3x-ui установлен и настроен"
+    print_info "Данные доступа сохранены в: /root/.3xui_credentials"
 else
-    print_info "3x-ui уже установлен — пропускаем"
+    print_error "Установка 3x-ui не удалась"
+    # Восстанавливаем Nginx даже при ошибке
+    systemctl start nginx
+    exit 1
 fi
+
+# Запускаем Nginx обратно после завершения установки 3x-ui
+systemctl start nginx
 
 # =============== НАСТРОЙКА Nginx РЕВЕРС ПРОКСИ ===============
 print_step "Настройка Nginx реверс прокси"
