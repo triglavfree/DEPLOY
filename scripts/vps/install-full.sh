@@ -330,9 +330,16 @@ fi
 print_success "ОС: $PRETTY_NAME"
 
 # =============== ПРОВЕРКА ИНТЕРНЕТА ===============
-print_step "Проверка доступа к интернету"
-check_internet
-
+# Проверка доступа к интернету
+check_internet() {
+    print_info "→ Проверка подключения к google.com..."
+    if ping -c 1 -W 3 google.com &> /dev/null; then
+        print_success "Доступ к интернету подтверждён"
+    else
+        print_error "Нет доступа к интернету. Проверьте сетевые настройки."
+        exit 1
+    fi
+}
 # =============== ПРОВЕРКА GLIBC ===============
 print_step "Проверка версии GLIBC"
 check_glibc_version
