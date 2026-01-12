@@ -415,31 +415,76 @@ print_success "UFW активирован"
 # Отключение паролей в SSH (только ключи!)
 SSH_CONFIG_BACKUP="/etc/ssh/sshd_config.before_disable_passwords"
 if [ ! -f "$SSH_CONFIG_BACKUP" ]; then
+    print_info "→ Создание резервной копии SSH-конфигурации..."
     cp /etc/ssh/sshd_config "$SSH_CONFIG_BACKUP"
-    sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
-    sed -i 's/^#\?ChallengeResponseAuthentication.*/ChallengeResponseAuthentication no/' /etc/ssh/sshd_config
+    
+    print_info "→ Отключение паролей в SSH..."
+    # Безопасное изменение конфигурации с проверкой
+    if ! grep -q "^PasswordAuthentication" /etc/ssh/sshd_config; then
+        echo "PasswordAuthentication no" >> /etc/ssh/sshd_config
+    else
+        sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+    fi
+    
+    if ! grep -q "^ChallengeResponseAuthentication" /etc/ssh/sshd_config; then
+        echo "ChallengeResponseAuthentication no" >> /etc/ssh/sshd_config
+    else
+        sed -i 's/^#\?ChallengeResponseAuthentication.*/ChallengeResponseAuthentication no/' /etc/ssh/sshd_config
+    fi
+    
+    # Проверяем конфигурацию БЕЗ перенаправления в /dev/null
+    print_info "→ Проверка конфигурации SSH..."
     if sshd -t; then
+        print_success "→ Конфигурация SSH валидна"
+        
+        # Определяем имя SSH-сервиса
         SSH_SERVICE="ssh"
-        systemctl list-unit-files --quiet | grep -q '^sshd\.service' && SSH_SERVICE="sshd"
-        systemctl reload "$SSH_SERVICE" || systemctl restart "$SSH_SERVICE"
-        sleep 2
-        if systemctl is-active --quiet "$SSH_SERVICE"; then
-            print_success "Пароли в SSH отключены. Доступ — только по ключу!"
+        if systemctl list-unit-files --quiet | grep -q '^sshd\.service'; then
+            SSH_SERVICE="sshd"
+        fi
+        
+        print_info "→ Перезагрузка SSH-сервиса ($SSH_SERVICE)..."
+        if systemctl reload "$SSH_SERVICE" 2>/dev/null; then
+            sleep 2
+            if systemctl is-active --quiet "$SSH_SERVICE"; then
+                print_success "Пароли в SSH отключены. Доступ — только по ключу!"
+            else
+                print_warning "SSH-сервис не активен. Попытка перезапуска..."
+                systemctl restart "$SSH_SERVICE"
+                sleep 2
+                if systemctl is-active --quiet "$SSH_SERVICE"; then
+                    print_success "SSH успешно перезапущен"
+                else
+                    print_error "Не удалось запустить SSH после изменения конфигурации!"
+                    print_info "→ Восстановление оригинальной конфигурации..."
+                    cp "$SSH_CONFIG_BACKUP" /etc/ssh/sshd_config
+                    systemctl restart "$SSH_SERVICE"
+                    exit 1
+                fi
+            fi
         else
-            cp "$SSH_CONFIG_BACKUP" /etc/ssh/sshd_config
+            print_warning "Не удалось перезагрузить SSH, пробуем перезапуск..."
             systemctl restart "$SSH_SERVICE"
-            print_error "SSH не запустился! Конфигурация восстановлена."
-            exit 1
+            sleep 2
+            if systemctl is-active --quiet "$SSH_SERVICE"; then
+                print_success "SSH успешно перезапущен"
+            else
+                print_error "Не удалось запустить SSH после изменения конфигурации!"
+                print_info "→ Восстановление оригинальной конфигурации..."
+                cp "$SSH_CONFIG_BACKUP" /etc/ssh/sshd_config
+                systemctl restart "$SSH_SERVICE"
+                exit 1
+            fi
         fi
     else
+        print_error "Ошибка в конфигурации SSH!"
+        print_info "→ Восстановление оригинальной конфигурации..."
         cp "$SSH_CONFIG_BACKUP" /etc/ssh/sshd_config
-        print_error "Ошибка в конфигурации SSH! Восстановлено."
         exit 1
     fi
 else
     print_info "SSH уже настроен без паролей — пропускаем"
 fi
-
 # Fail2ban — защита от брутфорса
 SSH_PORT=$(grep -Po '^Port \K\d+' /etc/ssh/sshd_config 2>/dev/null || echo 22)
 mkdir -p /etc/fail2ban/jail.d
