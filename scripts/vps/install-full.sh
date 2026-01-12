@@ -532,7 +532,6 @@ fi
 print_step "Установка VS Code Server"
 if ! command -v code-server >/dev/null 2>&1; then
     print_info "→ Установка code-server (вывод скрыт)..."
-    # Устанавливаем без видимого вывода, но сохраняем ошибки
     if ! curl -fsSL https://code-server.dev/install.sh | sh >/dev/null 2>&1; then
         print_error "Не удалось установить code-server"
         exit 1
@@ -541,28 +540,7 @@ else
     print_info "→ code-server уже установлен — пропускаем"
 fi
 
-# Настройка автозапуска (все команды без вывода)
-SYSTEMD_USER_DIR="/root/.config/systemd/user"
-mkdir -p "$SYSTEMD_USER_DIR" >/dev/null 2>&1
-
-# Создаём юнит-файл
-cat > "$SYSTEMD_USER_DIR/code-server.service" <<EOF >/dev/null 2>&1
-[Unit]
-Description=code-server
-After=network.target
-
-[Service]
-Type=exec
-ExecStart=/usr/bin/code-server --bind-addr 0.0.0.0:8443 --auth password
-Restart=always
-RestartSec=3
-Environment=PASSWORD=$VSCODE_PASSWORD
-
-[Install]
-WantedBy=default.target
-EOF
-
-# Генерация пароля
+# Генерация пароля (если ещё не создан)
 VSCODE_PASSWORD_FILE="/root/.vscode_password"
 if [ ! -f "$VSCODE_PASSWORD_FILE" ]; then
     VSCODE_PASSWORD=$(gen_random_string 12)
@@ -581,12 +559,14 @@ password: $VSCODE_PASSWORD
 cert: false
 EOF
 
-# Включаем linger и запускаем сервис (без вывода)
+# Включаем linger для root — чтобы пользовательские сервисы работали без активной сессии
 loginctl enable-linger root >/dev/null 2>&1
+
+# Перезагружаем systemd и запускаем пользовательский сервис
 systemctl --user daemon-reload >/dev/null 2>&1
 systemctl --user enable --now code-server >/dev/null 2>&1
 
-# Проверка статуса (остаётся видимой)
+# Проверка статуса
 if systemctl --user is-active --quiet code-server; then
     print_success "VS Code Server установлен и запущен"
     print_info "Доступ: http://$EXTERNAL_IP:8443"
@@ -595,7 +575,6 @@ else
     print_error "Не удалось запустить VS Code Server"
     exit 1
 fi
-
 # =============== УСТАНОВКА 3X-UI ===============
 print_step "Установка 3x-ui"
 XUI_SERVICE="/etc/systemd/system/x-ui.service"
