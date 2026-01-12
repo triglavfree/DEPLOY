@@ -340,6 +340,7 @@ check_internet() {
         exit 1
     fi
 }
+
 # =============== ПРОВЕРКА GLIBC ===============
 print_step "Проверка версии GLIBC"
 check_glibc_version
