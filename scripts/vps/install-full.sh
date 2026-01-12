@@ -10,13 +10,14 @@ set -e
 
 # =============== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===============
 REPO_URL="https://raw.githubusercontent.com/triglavfree/deploy/main"
-SCRIPT_VERSION="1.4.0"
+SCRIPT_VERSION="2.0.0"
 CURRENT_IP="unknown"
 EXTERNAL_IP=$(curl -s https://api.ipify.org 2>/dev/null || echo "unknown")
 LOG_FILE="/var/log/deploy_full.log"
 BACKUP_DIR="/root/backup_$(date +%Y%m%d_%H%M%S)"
 SYSTEM_UPDATE_STATUS=""
 IDEMPOTENT_MARKER="/root/.deploy_full_installed"  # Метка завершённой установки
+BASE_DOMAIN=""  # Базовый домен для сервисов (например, kernel.mooo.info)
 
 # =============== ЦВЕТА ДЛЯ ВЫВОДА ===============
 RED='\033[0;31m'
@@ -118,69 +119,93 @@ apply_max_performance_optimizations() {
                 print_info "Модуль ядра tcp_bbr загружен."
                 echo "tcp_bbr" > /etc/modules-load.d/tcp-bbr.conf
             else
-                print_warning "Не удалось загрузить модуль tcp_bbr. BBR может не работать."
+                print_warning "Не удалось загрузить модуль tcp_bbr. BBR может не активироваться."
             fi
         else
             print_info "Модуль tcp_bbr уже загружен."
         fi
 
+        # Записываем полный конфиг с подробными комментариями
         cat > "$config_file" << 'EOF'
+# ============================================================================
+# МАКСИМАЛЬНЫЕ ОПТИМИЗАЦИИ ЯДРА LINUX ДЛЯ VPS (Ubuntu 24.04 LTS)
+# Цель: максимизация пропускной способности, снижение задержек, повышение стабильности
+# ============================================================================
+
+# ---------------------------
 # BBR congestion control
-net.core.default_qdisc = fq
-net.ipv4.tcp_congestion_control = bbr
-net.ipv4.tcp_fastopen = 3
+# ---------------------------
+net.core.default_qdisc = fq               # Использовать Fair Queueing вместо pfifo_fast — улучшает BBR и снижает latency
+net.ipv4.tcp_congestion_control = bbr     # Включить BBR (Bottleneck Bandwidth and RTT) — современный алгоритм контроля перегрузки от Google
+net.ipv4.tcp_fastopen = 3                 # Включить TCP Fast Open (TFO) для клиентов и серверов — ускоряет установку соединений на 1 RTT
 
+# ---------------------------
 # Сетевые буферы
-net.core.rmem_max = 67108864
-net.core.wmem_max = 67108864
-net.core.rmem_default = 131072
-net.core.wmem_default = 131072
-net.ipv4.tcp_rmem = 4096 87380 67108864
-net.ipv4.tcp_wmem = 4096 65536 67108864
-net.ipv4.tcp_mem = 786432 1048576 1572864
+# ---------------------------
+net.core.rmem_max = 67108864              # Макс. размер буфера приема (64MB) — для высокоскоростных соединений
+net.core.wmem_max = 67108864              # Макс. размер буфера передачи (64MB) — для высокоскоростных соединений
+net.core.rmem_default = 131072            # Стандартный размер буфера приема (128KB) — баланс между памятью и производительностью
+net.core.wmem_default = 131072            # Стандартный размер буфера передачи (128KB) — баланс между памятью и производительностью
+net.ipv4.tcp_rmem = 4096 87380 67108864   # Мин/По умолчанию/Макс буферы приема TCP — динамическая адаптация под нагрузку
+net.ipv4.tcp_wmem = 4096 65536 67108864   # Мин/По умолчанию/Макс буферы передачи TCP — динамическая адаптация под нагрузку
+net.ipv4.tcp_mem = 786432 1048576 1572864 # Память для TCP (страницы): минимальная/баланс/максимальная — предотвращает исчерпание памяти
 
+# ---------------------------
 # Лимиты подключений
-net.core.somaxconn = 65535
-net.core.netdev_max_backlog = 65536
-net.ipv4.tcp_max_syn_backlog = 65536
-net.ipv4.tcp_max_tw_buckets = 1440000
+# ---------------------------
+net.core.somaxconn = 65535                # Макс. длина очереди accept() — увеличено с 128 до 65K для высоконагруженных серверов
+net.core.netdev_max_backlog = 65536       # Макс. очередь пакетов для сетевых устройств — предотвращает потерю пакетов при всплесках трафика
+net.ipv4.tcp_max_syn_backlog = 65536      # Макс. очередь SYN-запросов — защищает от SYN-флуда и ускоряет установку соединений
+net.ipv4.tcp_max_tw_buckets = 1440000     # Макс. количество TIME-WAIT сокетов — предотвращает исчерпание ресурсов при большом количестве коротких соединений
 
+# ---------------------------
 # Оптимизация TCP
-net.ipv4.tcp_slow_start_after_idle = 0
-net.ipv4.tcp_synack_retries = 2
-net.ipv4.tcp_syn_retries = 3
-net.ipv4.tcp_retries2 = 8
-net.ipv4.tcp_tw_reuse = 1
-net.ipv4.tcp_fin_timeout = 30
+# ---------------------------
+net.ipv4.tcp_slow_start_after_idle = 0    # Отключить медленный старт после простоя — сохраняет высокую скорость после пауз
+net.ipv4.tcp_synack_retries = 2           # Уменьшить повторы SYN-ACK до 2 — быстрый отказ при недоступности клиента
+net.ipv4.tcp_syn_retries = 3              # Уменьшить повторы SYN до 3 — быстрый отказ при недоступности сервера
+net.ipv4.tcp_retries2 = 8                 # Повторы для установленных соединений — баланс между надёжностью и временем ожидания
+net.ipv4.tcp_tw_reuse = 1                 # Разрешить повторное использование TIME-WAIT сокетов — снижает потребление портов
+net.ipv4.tcp_fin_timeout = 30             # Таймаут FIN пакетов — закрывать соединения быстрее (по умолчанию 60 сек)
 
+# ---------------------------
 # Keepalive настройки
-net.ipv4.tcp_keepalive_time = 300
-net.ipv4.tcp_keepalive_probes = 5
-net.ipv4.tcp_keepalive_intvl = 15
+# ---------------------------
+net.ipv4.tcp_keepalive_time = 300         # Интервал проверки живости (5 минут) — раньше по умолчанию 7200 сек (2 часа)
+net.ipv4.tcp_keepalive_probes = 5         # Количество проверок перед разрывом — 5 попыток по 15 сек = 75 сек всего
+net.ipv4.tcp_keepalive_intvl = 15         # Интервал между проверками (15 сек) — быстрое обнаружение обрыва соединения
 
+# ---------------------------
 # Безопасность и стабильность
-net.ipv4.tcp_syncookies = 1
-net.ipv4.ip_forward = 1
+# ---------------------------
+net.ipv4.tcp_syncookies = 1               # Включить SYN cookies — защита от SYN-флуд атак без потери легитимных соединений
+net.ipv4.ip_forward = 1                   # Включить IP forwarding — необходимо для работы Nginx, Docker, VPN и других шлюзов
 
+# ---------------------------
 # VM параметры оптимизации памяти
-vm.swappiness = 30
-vm.vfs_cache_pressure = 100
-vm.dirty_background_ratio = 5
-vm.dirty_ratio = 15
-vm.overcommit_memory = 1
+# ---------------------------
+vm.swappiness = 30                        # Контроль использования swap: 0=избегать, 100=активно использовать. 30 — баланс для серверов с 4GB RAM
+vm.vfs_cache_pressure = 100               # Баланс кэширования: 100=по умолчанию, <100=сохранять inode/dentry кэш дольше
+vm.dirty_background_ratio = 5             # Начинать фоновую запись "грязных" страниц при 5% от общего объема памяти
+vm.dirty_ratio = 15                       # Макс. процент "грязных" страниц перед блокировкой записи процессов (защита от OOM)
+vm.overcommit_memory = 1                  # Агрессивный overcommit памяти: 0=эвристический, 1=всегда разрешать, 2=строгий контроль
 
+# ---------------------------
 # Дополнительные оптимизации
-fs.file-max = 2097152
-fs.inotify.max_user_watches = 524288
-fs.inotify.max_user_instances = 512
+# ---------------------------
+fs.file-max = 2097152                     # Макс. количество файловых дескрипторов в системе — необходимо для тысяч одновременных соединений
+fs.inotify.max_user_watches = 524288      # Макс. количество наблюдений за файлами (inotify) — важно для VS Code, n8n, Node.js
+fs.inotify.max_user_instances = 512       # Макс. количество экземпляров inotify на пользователя — предотвращает ошибки "No space left on device"
 EOF
 
+        # Применяем настройки
         sysctl -p "$config_file" >/dev/null 2>&1 || true
 
+        # Проверяем, что BBR действительно активен
         if sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null | grep -q "^bbr$"; then
             print_success "Максимальные оптимизации ядра применены (BBR активен)"
         else
-            print_warning "Оптимизации применены, но BBR не активен."
+            print_warning "Оптимизации применены, но BBR не активен. Проверьте: modprobe tcp_bbr"
         fi
     else
         print_info "Максимальные оптимизации ядра уже настроены"
@@ -212,9 +237,12 @@ check_ssh_access_safety() {
     print_warning "SSH-ключи для root НЕ настроены!"
     echo
     print_info "Настройте SSH-ключи на своём компьютере:"
-    print_info "1. ssh-keygen -t ed25519 -C \"ваш_email@example.com\""
-    print_info "2. ssh-copy-id root@ваш_сервер_ip"
-    print_info "3. chmod 700 /root/.ssh && chmod 600 /root/.ssh/authorized_keys"
+    print_info "1. Создайте ключ (если ещё нет): ssh-keygen -t ed25519 -C \"ваш_email@example.com\""
+    print_info "2. Скопируйте публичный ключ на сервер:"
+    print_info "   ssh-copy-id root@ваш_сервер_ip"
+    print_info "   ИЛИ вручную добавьте содержимое ~/.ssh/id_ed25519.pub в /root/.ssh/authorized_keys"
+    print_info "3. Установите права:"
+    print_info "   chmod 700 /root/.ssh && chmod 600 /root/.ssh/authorized_keys"
     echo
     print_info "После настройки — запустите скрипт снова."
     print_success "Скрипт завершён. Без SSH-ключей дальнейшая установка невозможна."
@@ -242,6 +270,42 @@ if [ "$(id -u)" != "0" ]; then
     exit 1
 fi
 print_success "Запущено с правами root"
+
+# =============== ЗАПРОС БАЗОВОГО ДОМЕНА ===============
+print_step "Запрос конфигурации домена"
+
+# Проверяем, задан ли BASE_DOMAIN через переменную окружения
+if [ -z "$BASE_DOMAIN" ] && [ -n "$1" ]; then
+    BASE_DOMAIN="$1"
+fi
+
+# Если домен не задан через переменную или аргумент, запрашиваем интерактивно
+if [ -z "$BASE_DOMAIN" ]; then
+    if [ -t 0 ]; then
+        # Если stdin — терминал (локальный запуск), запрашиваем ввод
+        read -rp "Введите ваш базовый домен (например, kernel.mooo.info): " BASE_DOMAIN
+    else
+        # Если stdin — pipe (curl | bash), требуем задания через переменную
+        print_error "Скрипт запущен через pipe. Укажите домен через переменную:"
+        print_error "BASE_DOMAIN=ваш.домен curl -fsSL https://.../install-full.sh | sudo -E bash"
+        exit 1
+    fi
+fi
+
+# Валидация домена
+if [ -z "$BASE_DOMAIN" ]; then
+    print_error "Базовый домен не может быть пустым!"
+    exit 1
+fi
+
+# Убираем лишние пробелы
+BASE_DOMAIN=$(echo "$BASE_DOMAIN" | sed 's/^[ \t]*//;s/[ \t]*$//')
+
+print_success "Используется домен: $BASE_DOMAIN"
+print_info "Поддомены будут созданы автоматически:"
+print_info "  • n8n.$BASE_DOMAIN"
+print_info "  • vscode.$BASE_DOMAIN"
+print_info "  • xui.$BASE_DOMAIN"
 
 # =============== РЕЗЕРВНЫЕ КОПИИ ===============
 print_step "Создание резервных копий"
@@ -336,11 +400,6 @@ print_step "Настройка безопасности"
 ufw --force reset >/dev/null 2>&1 || true
 ufw default deny incoming >/dev/null 2>&1
 ufw default allow outgoing >/dev/null 2>&1
-
-# Открываем порты ДО установки 3x-ui, VS Code, n8n и выпуска сертификатов!
-# Порт 22 — SSH (только с вашего IP)
-# Порт 80 — HTTP (Let's Encrypt ACME challenge + Nginx reverse proxy)
-# Порт 443 — HTTPS (резерв для будущих сервисов)
 if [ -n "$CURRENT_IP" ]; then
     ufw allow from "$CURRENT_IP" to any port 22 comment "SSH с доверенного IP" >/dev/null 2>&1
     print_success "UFW: SSH разрешён только с $CURRENT_IP"
@@ -348,8 +407,13 @@ else
     ufw allow 22 comment "SSH (глобально)" >/dev/null 2>&1
     print_warning "UFW: SSH разрешён для всех (IP не определён)"
 fi
-ufw allow 80 comment "HTTP (ACME + Nginx)" >/dev/null 2>&1
+
+# Открываем порты для сервисов
+ufw allow 80 comment "HTTP" >/dev/null 2>&1
 ufw allow 443 comment "HTTPS" >/dev/null 2>&1
+ufw allow 5678 comment "n8n" >/dev/null 2>&1
+ufw allow 8443 comment "VS Code Server" >/dev/null 2>&1
+
 ufw --force enable >/dev/null 2>&1
 print_success "UFW активирован"
 
@@ -445,22 +509,20 @@ fi
 # =============== УСТАНОВКА ГЛОБАЛЬНЫХ NPM ПАКЕТОВ ===============
 print_step "Установка глобальных npm пакетов"
 
-# Установка n8n
+# n8n
 if ! command -v n8n >/dev/null 2>&1; then
-    print_info "→ Установка n8n..."
     npm install -g n8n >/dev/null 2>&1
     print_success "n8n установлен: $(n8n --version)"
 else
-    print_info "→ n8n уже установлен — пропускаем"
+    print_info "n8n уже установлен — пропускаем"
 fi
 
-# Установка qwen-code
+# qwen-code
 if ! command -v qwen-code >/dev/null 2>&1; then
-    print_info "→ Установка qwen-code..."
     npm install -g @qwen-code/qwen-code@latest >/dev/null 2>&1
     print_success "qwen-code установлен"
 else
-    print_info "→ qwen-code уже установлен — пропускаем"
+    print_info "qwen-code уже установлен — пропускаем"
 fi
 
 # =============== НАСТРОЙКА QWEN-CODE С MCP SERVER CONTEXT7 ===============
@@ -576,54 +638,16 @@ systemctl --user enable --now code-server >/dev/null 2>&1
 # Проверка статуса
 if systemctl --user is-active --quiet code-server; then
     print_success "VS Code Server установлен и запущен"
-    print_info "Доступ: http://$EXTERNAL_IP:8443"
+    print_info "Доступ: http://vscode.$BASE_DOMAIN"
     print_info "Пароль сохранён в: /root/.vscode_password"
 else
     print_error "Не удалось запустить VS Code Server"
     exit 1
 fi
+
 # =============== УСТАНОВКА 3X-UI ===============
 print_step "Установка 3x-ui"
-
-# Останавливаем Nginx, чтобы освободить порт 80 для ACME challenge
-systemctl stop nginx
-
-# Устанавливаем 3x-ui
 bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh)
-
-# Настройка 3x-ui (генерация случайных данных)
-if [ -f /usr/local/x-ui/x-ui ]; then
-    WEBBASEPATH=$(gen_random_string 15)
-    USERNAME=$(gen_random_string 10)
-    PASSWORD=$(gen_random_string 10)
-    PORT=$(shuf -i 1024-62000 -n 1)
-
-    while ! check_port_available "$PORT"; do
-        PORT=$(shuf -i 1024-62000 -n 1)
-    done
-
-    /usr/local/x-ui/x-ui setting -username "$USERNAME" -password "$PASSWORD" -port "$PORT" -webBasePath "$WEBBASEPATH" >/dev/null 2>&1
-    systemctl restart x-ui
-
-    echo "3XUI_CREDENTIALS" > /root/.3xui_credentials
-    echo "URL: http://$EXTERNAL_IP:$PORT/$WEBBASEPATH" >> /root/.3xui_credentials
-    echo "Логин: $USERNAME" >> /root/.3xui_credentials
-    echo "Пароль: $PASSWORD" >> /root/.3xui_credentials
-    echo "Порт: $PORT" >> /root/.3xui_credentials
-    echo "WebBasePath: $WEBBASEPATH" >> /root/.3xui_credentials
-    chmod 600 /root/.3xui_credentials
-
-    print_success "3x-ui установлен и настроен"
-    print_info "Данные доступа сохранены в: /root/.3xui_credentials"
-else
-    print_error "Установка 3x-ui не удалась"
-    # Восстанавливаем Nginx даже при ошибке
-    systemctl start nginx
-    exit 1
-fi
-
-# Запускаем Nginx обратно после завершения установки 3x-ui
-systemctl start nginx
 
 # =============== НАСТРОЙКА Nginx РЕВЕРС ПРОКСИ ===============
 print_step "Настройка Nginx реверс прокси"
@@ -631,21 +655,13 @@ print_step "Настройка Nginx реверс прокси"
 NGINX_SITES_AVAILABLE="/etc/nginx/sites-available"
 NGINX_N8N_CONF="$NGINX_SITES_AVAILABLE/n8n.conf"
 NGINX_CODE_CONF="$NGINX_SITES_AVAILABLE/code-server.conf"
-NGINX_XUI_CONF="$NGINX_SITES_AVAILABLE/3x-ui.conf"
-
-# Получаем порт 3x-ui из конфига
-if [ -f /root/.3xui_credentials ]; then
-    XUI_PORT=$(grep "Порт:" /root/.3xui_credentials | awk '{print $2}')
-else
-    XUI_PORT=8080
-fi
 
 # n8n
 if [ ! -f "$NGINX_N8N_CONF" ]; then
     cat > "$NGINX_N8N_CONF" <<EOF
 server {
     listen 80;
-    server_name _;
+    server_name n8n.$BASE_DOMAIN;
 
     location / {
         proxy_pass http://localhost:5678;
@@ -662,12 +678,12 @@ server {
 EOF
 fi
 
-# code-server
+# VS Code Server
 if [ ! -f "$NGINX_CODE_CONF" ]; then
     cat > "$NGINX_CODE_CONF" <<EOF
 server {
     listen 80;
-    server_name _;
+    server_name vscode.$BASE_DOMAIN;
 
     location / {
         proxy_pass http://localhost:8443;
@@ -684,33 +700,15 @@ server {
 EOF
 fi
 
-# 3x-ui
-if [ ! -f "$NGINX_XUI_CONF" ]; then
-    cat > "$NGINX_XUI_CONF" <<EOF
-server {
-    listen 80;
-    server_name _;
-
-    location / {
-        proxy_pass http://localhost:$XUI_PORT;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_read_timeout 86400s;
-    }
-}
-EOF
-fi
-
-# Активация
-for site in n8n code-server 3x-ui; do
+# Активация конфигураций
+for site in n8n code-server; do
     if [ ! -L "/etc/nginx/sites-enabled/$site.conf" ]; then
         ln -sf "$NGINX_SITES_AVAILABLE/$site.conf" /etc/nginx/sites-enabled/
     fi
 done
 rm /etc/nginx/sites-enabled/default 2>/dev/null || true
 
+# Проверка конфигурации Nginx перед перезапуском
 if nginx -t; then
     systemctl restart nginx
     print_success "Nginx настроен как реверс прокси"
@@ -722,7 +720,7 @@ fi
 # =============== ЗАПУСК СЕРВИСОВ ===============
 print_step "Запуск сервисов"
 
-# n8n
+# n8n сервис
 N8N_SERVICE="/etc/systemd/system/n8n.service"
 if [ ! -f "$N8N_SERVICE" ]; then
     cat > "$N8N_SERVICE" <<EOF
@@ -751,8 +749,8 @@ else
     print_info "n8n уже настроен — пропускаем"
 fi
 
-# Проверка статуса всех сервисов
-SERVICES=("nginx" "fail2ban" "code-server" "n8n" "x-ui")
+# Проверка статуса сервисов
+SERVICES=("nginx" "fail2ban" "n8n")
 for service in "${SERVICES[@]}"; do
     if systemctl is-active --quiet "$service"; then
         print_success "Сервис $service активен"
@@ -773,31 +771,24 @@ print_info "  • Swap: $(free -h | grep Swap | awk '{print $2}')"
 print_success "Установленные сервисы:"
 print_info "  • Node.js: $(node -v)"
 print_info "  • n8n: $(n8n --version) (порт 5678)"
-
-# Информация о Context7 без раскрытия ключа
-if [ -f /root/.context7_configured ]; then
-    print_success "  • Qwen-code: настроен с MCP сервером Context7"
-    print_info "    → Конфиг: ~/.qwen/settings.json (права 600)"
-else
-    print_warning "  • Qwen-code: MCP Context7 не настроен"
-fi
-
-print_info "  • 3x-ui: данные в /root/.3xui_credentials"
-print_info "  • VS Code Server: http://$EXTERNAL_IP:8443 (пароль в /root/.vscode_password)"
+print_info "    → Доступ: http://n8n.$BASE_DOMAIN"
+print_info "  • VS Code Server: http://vscode.$BASE_DOMAIN (пароль в /root/.vscode_password)"
+print_info "  • 3x-ui: установлен (настройте через установочный скрипт)"
+print_info "  • Qwen-code: настроен с MCP сервером Context7"
 print_info "  • Python uv: готов к использованию"
 
 print_success "Безопасность:"
 print_info "  • UFW: активен, SSH только с $CURRENT_IP"
 print_info "  • fail2ban: защищает SSH"
 print_info "  • SSH: пароли отключены"
+print_info "  • Открыты порты: 22 (SSH), 80 (HTTP), 443 (HTTPS), 5678 (n8n), 8443 (VS Code)"
 
-print_success "Реверс прокси Nginx:"
-print_info "  • n8n.yourdomain.afraid.org → localhost:5678"
-print_info "  • vscode.yourdomain.afraid.org → localhost:8443"
-print_info "  • xui.yourdomain.afraid.org → 3x-ui (порт $XUI_PORT)"
-
-print_info "Доменные имена: настройте на https://freedns.afraid.org/"
-print_info "   Создайте A-записи для ваших поддоменов → $EXTERNAL_IP"
+print_success "Доменные имена:"
+print_info "  • Настройте A-записи на https://freedns.afraid.org/"
+print_info "  • Создайте записи для:"
+print_info "    → n8n.$BASE_DOMAIN → $EXTERNAL_IP"
+print_info "    → vscode.$BASE_DOMAIN → $EXTERNAL_IP"
+print_info "  • Для 3x-ui настройте домен через его установочный скрипт"
 
 print_info "Лог установки: $LOG_FILE"
 print_info "Резервные копии: $BACKUP_DIR"
