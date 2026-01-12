@@ -222,10 +222,33 @@ print_success "Система обновлена: $SYSTEM_UPDATE_STATUS"
 
 # =============== УСТАНОВКА БАЗОВЫХ ПАКЕТОВ ===============
 print_step "Установка базовых пакетов"
+
+# Проверка свободного места на диске
+print_info "Проверка свободного места на диске"
+FREE_SPACE=$(df -BG / | awk 'NR==2 {print $4}' | sed 's/G//')
+if [ "$FREE_SPACE" -lt 10 ]; then
+    print_error "Недостаточно свободного места на диске. Требуется минимум 10GB."
+    exit 1
+fi
+print_success "Достаточно свободного места: ${FREE_SPACE}GB"
+
+# Проверка доступа к интернету
+print_info "Проверка доступа к интернету"
+if ! ping -c 1 google.com &> /dev/null; then
+    print_error "Нет доступа к интернету. Проверьте сетевые настройки."
+    exit 1
+fi
+print_success "Доступ к интернету есть"
+
+# Обновление репозиториев
+print_info "Обновление репозиториев"
+apt-get update -yqq
+
 PACKAGES=("curl" "wget" "git" "unzip" "tar" "net-tools" "ufw" "fail2ban" "nginx" "python3" "python3-pip" "python3-venv")
 for pkg in "${PACKAGES[@]}"; do
     if ! dpkg -l | grep -q "^ii  $pkg "; then
-        apt-get install -y -qq "$pkg" >/dev/null 2>&1
+        print_info "Установка $pkg..."
+        apt-get install -yqq "$pkg"
     fi
 done
 print_success "Базовые пакеты установлены"
