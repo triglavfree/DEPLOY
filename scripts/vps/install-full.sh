@@ -532,55 +532,28 @@ fi
 print_step "Установка VS Code Server"
 VSCODE_SERVICE="/etc/systemd/system/code-server.service"
 if [ ! -f "$VSCODE_SERVICE" ]; then
-    # Убедимся, что ca-certificates установлен
-    if ! dpkg-query -W -f='${Status}' ca-certificates 2>/dev/null | grep -q "^install ok installed$"; then
-        print_info "→ Установка ca-certificates для безопасной загрузки..."
-        apt-get install -yqq ca-certificates
-    fi
+    print_info "→ Используем официальный установочный скрипт code-server..."
     
-    mkdir -p /opt/code-server
-    cd /opt/code-server
+    # Скачиваем и запускаем официальный install.sh
+    curl -fsSL https://code-server.dev/install.sh | sh
     
-    # Скачиваем с явной проверкой
-    print_info "→ Скачивание code-server..."
-    if ! wget -O code-server-linux-amd64.tar.gz https://github.com/coder/code-server/releases/latest/download/code-server-linux-amd64.tar.gz; then
-        print_error "Не удалось скачать code-server. Проверьте интернет и SSL-сертификаты."
-        exit 1
-    fi
-    
-    # Проверяем, что файл скачался
-    if [ ! -s code-server-linux-amd64.tar.gz ]; then
-        print_error "Файл code-server пустой. Проблема с загрузкой."
-        exit 1
-    fi
-    
-    tar -xzf code-server-linux-amd64.tar.gz --strip-components=1 >/dev/null 2>&1
-    rm code-server-linux-amd64.tar.gz
-
+    # Генерация пароля
     VSCODE_PASSWORD=$(gen_random_string 12)
     echo "$VSCODE_PASSWORD" > /root/.vscode_password
-
-    cat > "$VSCODE_SERVICE" <<EOF
-[Unit]
-Description=code-server
-After=network.target
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=/root
-ExecStart=/opt/code-server/bin/code-server --bind-addr 0.0.0.0:8443 --auth password
-Environment=PASSWORD=$VSCODE_PASSWORD
-Restart=always
-RestartSec=3
-
-[Install]
-WantedBy=multi-user.target
+    
+    # Настройка автозапуска и пароля
+    mkdir -p ~/.config/code-server
+    cat > ~/.config/code-server/config.yaml <<EOF
+bind-addr: 0.0.0.0:8443
+auth: password
+password: $VSCODE_PASSWORD
+cert: false
 EOF
 
-    systemctl daemon-reload
-    systemctl enable code-server
-    systemctl start code-server
+    # Перезапуск сервиса
+    systemctl enable --now code-server
+    systemctl restart code-server
+    
     print_success "VS Code Server установлен"
     print_info "Доступ: http://$EXTERNAL_IP:8443"
     print_info "Пароль сохранён в: /root/.vscode_password"
