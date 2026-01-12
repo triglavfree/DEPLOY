@@ -532,9 +532,28 @@ fi
 print_step "Установка VS Code Server"
 VSCODE_SERVICE="/etc/systemd/system/code-server.service"
 if [ ! -f "$VSCODE_SERVICE" ]; then
+    # Убедимся, что ca-certificates установлен
+    if ! dpkg-query -W -f='${Status}' ca-certificates 2>/dev/null | grep -q "^install ok installed$"; then
+        print_info "→ Установка ca-certificates для безопасной загрузки..."
+        apt-get install -yqq ca-certificates
+    fi
+    
     mkdir -p /opt/code-server
     cd /opt/code-server
-    wget https://github.com/coder/code-server/releases/latest/download/code-server-linux-amd64.tar.gz -q
+    
+    # Скачиваем с явной проверкой
+    print_info "→ Скачивание code-server..."
+    if ! wget -O code-server-linux-amd64.tar.gz https://github.com/coder/code-server/releases/latest/download/code-server-linux-amd64.tar.gz; then
+        print_error "Не удалось скачать code-server. Проверьте интернет и SSL-сертификаты."
+        exit 1
+    fi
+    
+    # Проверяем, что файл скачался
+    if [ ! -s code-server-linux-amd64.tar.gz ]; then
+        print_error "Файл code-server пустой. Проблема с загрузкой."
+        exit 1
+    fi
+    
     tar -xzf code-server-linux-amd64.tar.gz --strip-components=1 >/dev/null 2>&1
     rm code-server-linux-amd64.tar.gz
 
