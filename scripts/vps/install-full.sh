@@ -326,8 +326,30 @@ npm install -g @qwen-code/qwen-code@latest >/dev/null 2>&1
 print_success "qwen-code установлен"
 
 # Настройка qwen-code с MCP сервером Context7
+print_step "Настройка qwen-code с MCP сервером Context7"
+
+# Проверяем, есть ли переменная окружения CONTEXT7_API_KEY
+if [ -z "$CONTEXT7_API_KEY" ]; then
+    # Если нет, запрашиваем у пользователя
+    read -rp "Введите ваш CONTEXT7_API_KEY для Context7: " CONTEXT7_API_KEY
+fi
+
+# Проверяем, что ключ не пустой
+if [ -z "$CONTEXT7_API_KEY" ]; then
+    print_error "CONTEXT7_API_KEY не может быть пустым"
+    exit 1
+fi
+
+# Проверяем формат ключа (примерный шаблон)
+if ! [[ "$CONTEXT7_API_KEY" =~ ^ctx7sk-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$ ]]; then
+    print_warning "Формат CONTEXT7_API_KEY кажется неправильным. Убедитесь, что вы ввели корректный ключ."
+    read -rp "Продолжить? (y/n) [y]: " confirm
+    confirm=${confirm:-y}
+    [[ ! "$confirm" =~ ^[yY]$ ]] && exit 1
+fi
+
 mkdir -p ~/.qwen
-cat > ~/.qwen/settings.json <<'EOF'
+cat > ~/.qwen/settings.json <<EOF
 {
   "security": {
     "auth": {
@@ -342,7 +364,7 @@ cat > ~/.qwen/settings.json <<'EOF'
     "context7": {
       "httpUrl": "https://mcp.context7.com/mcp",
       "headers": {
-        "CONTEXT7_API_KEY": "ctx7sk-ed72d829-c070-4d1b-b9f6-79f70872afac",
+        "CONTEXT7_API_KEY": "$CONTEXT7_API_KEY",
         "Accept": "application/json, text/event-stream"
       }
     }
