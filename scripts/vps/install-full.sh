@@ -66,49 +66,56 @@ apply_max_performance_optimizations() {
             print_info "Модуль tcp_bbr уже загружен."
         fi
         
-        # Записываем конфиг
+        # Записываем полный конфиг
         cat > "$config_file" << 'EOF'
 # BBR congestion control
-net.core.default_qdisc = fq
-net.ipv4.tcp_congestion_control = bbr
-net.ipv4.tcp_fastopen = 3
+net.core.default_qdisc = fq               # Контроллер очереди для BBR
+net.ipv4.tcp_congestion_control = bbr     # Современный алгоритм контроля перегрузки
+net.ipv4.tcp_fastopen = 3                 # Ускорение установки соединений
+
 # Сетевые буферы
-net.core.rmem_max = 67108864
-net.core.wmem_max = 67108864
-net.core.rmem_default = 131072
-net.core.wmem_default = 131072
-net.ipv4.tcp_rmem = 4096 87380 67108864
-net.ipv4.tcp_wmem = 4096 65536 67108864
-net.ipv4.tcp_mem = 786432 1048576 1572864
+net.core.rmem_max = 67108864              # Макс. размер буфера приема (64MB)
+net.core.wmem_max = 67108864              # Макс. размер буфера передачи (64MB)
+net.core.rmem_default = 131072            # Стандартный размер буфера приема
+net.core.wmem_default = 131072            # Стандартный размер буфера передачи
+net.ipv4.tcp_rmem = 4096 87380 67108864   # Динамические буферы приема TCP
+net.ipv4.tcp_wmem = 4096 65536 67108864   # Динамические буферы передачи TCP
+net.ipv4.tcp_mem = 786432 1048576 1572864 # Память для TCP соединений
+
 # Лимиты подключений
-net.core.somaxconn = 65535
-net.core.netdev_max_backlog = 65536
-net.ipv4.tcp_max_syn_backlog = 65536
-net.ipv4.tcp_max_tw_buckets = 1440000
+net.core.somaxconn = 65535                # Макс. длина очереди accept() (65K)
+net.core.netdev_max_backlog = 65536       # Макс. очередь для сетевых устройств
+net.ipv4.tcp_max_syn_backlog = 65536      # Макс. очередь SYN-запросов
+net.ipv4.tcp_max_tw_buckets = 1440000     # Макс. TIME-WAIT бакетов
+
 # Оптимизация TCP
-net.ipv4.tcp_slow_start_after_idle = 0
-net.ipv4.tcp_synack_retries = 2
-net.ipv4.tcp_syn_retries = 3
-net.ipv4.tcp_retries2 = 8
-net.ipv4.tcp_tw_reuse = 1
-net.ipv4.tcp_fin_timeout = 30
-# Keepalive
-net.ipv4.tcp_keepalive_time = 300
-net.ipv4.tcp_keepalive_probes = 5
-net.ipv4.tcp_keepalive_intvl = 15
-# Безопасность
-net.ipv4.tcp_syncookies = 1
-net.ipv4.ip_forward = 1
-# VM параметры
-vm.swappiness = 30
-vm.vfs_cache_pressure = 100
-vm.dirty_background_ratio = 5
-vm.dirty_ratio = 15
-vm.overcommit_memory = 1
+net.ipv4.tcp_slow_start_after_idle = 0    # Отключить медленный старт после простоя
+net.ipv4.tcp_synack_retries = 2           # Повторы SYN-ACK (быстрый отказ)
+net.ipv4.tcp_syn_retries = 3              # Повторы SYN (быстрый отказ)
+net.ipv4.tcp_retries2 = 8                 # Повторы для установившихся соединений
+net.ipv4.tcp_tw_reuse = 1                 # Reuse TIME-WAIT сокетов
+net.ipv4.tcp_fin_timeout = 30             # Таймаут FIN пакетов
+
+# Keepalive настройки
+net.ipv4.tcp_keepalive_time = 300         # Интервал проверки живости (5 мин)
+net.ipv4.tcp_keepalive_probes = 5         # Количество проверок перед разрывом
+net.ipv4.tcp_keepalive_intvl = 15         # Интервал между проверками (15 сек)
+
+# Безопасность и стабильность
+net.ipv4.tcp_syncookies = 1               # Защита от SYN-флуд атак
+net.ipv4.ip_forward = 1                   # Важно для роутеров/шлюзов
+
+# VM параметры оптимизации памяти
+vm.swappiness = 30                        # Контроль использования swap
+vm.vfs_cache_pressure = 100               # Баланс кэширования
+vm.dirty_background_ratio = 5             # Начинать фоновую запись при 5% dirty
+vm.dirty_ratio = 15                       # Макс. dirty pages перед блокировкой
+vm.overcommit_memory = 1                  # Агрессивный overcommit памяти
+
 # Дополнительные оптимизации
-fs.file-max = 2097152
-fs.inotify.max_user_watches = 524288
-fs.inotify.max_user_instances = 512
+fs.file-max = 2097152                     # Макс. количество файловых дескрипторов
+fs.inotify.max_user_watches = 524288      # Макс. наблюдений за файлами
+fs.inotify.max_user_instances = 512       # Макс. экземпляров inotify
 EOF
         
         # Применяем настройки
