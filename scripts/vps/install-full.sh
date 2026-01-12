@@ -332,10 +332,15 @@ fi
 # =============== НАСТРОЙКА БЕЗОПАСНОСТИ ===============
 print_step "Настройка безопасности"
 
-# UFW
+# UFW — брандмауэр
 ufw --force reset >/dev/null 2>&1 || true
 ufw default deny incoming >/dev/null 2>&1
 ufw default allow outgoing >/dev/null 2>&1
+
+# Открываем порты ДО установки 3x-ui, VS Code, n8n и выпуска сертификатов!
+# Порт 22 — SSH (только с вашего IP)
+# Порт 80 — HTTP (Let's Encrypt ACME challenge + Nginx reverse proxy)
+# Порт 443 — HTTPS (резерв для будущих сервисов)
 if [ -n "$CURRENT_IP" ]; then
     ufw allow from "$CURRENT_IP" to any port 22 comment "SSH с доверенного IP" >/dev/null 2>&1
     print_success "UFW: SSH разрешён только с $CURRENT_IP"
@@ -343,12 +348,12 @@ else
     ufw allow 22 comment "SSH (глобально)" >/dev/null 2>&1
     print_warning "UFW: SSH разрешён для всех (IP не определён)"
 fi
-ufw allow 80 comment "HTTP" >/dev/null 2>&1
+ufw allow 80 comment "HTTP (ACME + Nginx)" >/dev/null 2>&1
 ufw allow 443 comment "HTTPS" >/dev/null 2>&1
 ufw --force enable >/dev/null 2>&1
 print_success "UFW активирован"
 
-# Отключение паролей в SSH
+# Отключение паролей в SSH (только ключи!)
 SSH_CONFIG_BACKUP="/etc/ssh/sshd_config.before_disable_passwords"
 if [ ! -f "$SSH_CONFIG_BACKUP" ]; then
     cp /etc/ssh/sshd_config "$SSH_CONFIG_BACKUP"
@@ -376,7 +381,7 @@ else
     print_info "SSH уже настроен без паролей — пропускаем"
 fi
 
-# Fail2ban
+# Fail2ban — защита от брутфорса
 SSH_PORT=$(grep -Po '^Port \K\d+' /etc/ssh/sshd_config 2>/dev/null || echo 22)
 mkdir -p /etc/fail2ban/jail.d
 if [ ! -f /etc/fail2ban/jail.d/sshd.local ] || ! grep -q "maxretry = 5" /etc/fail2ban/jail.d/sshd.local; then
