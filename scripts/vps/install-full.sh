@@ -10,12 +10,11 @@ set -e
 
 # =============== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===============
 REPO_URL="https://raw.githubusercontent.com/triglavfree/deploy/main"
-SCRIPT_VERSION="2.1.0"
+SCRIPT_VERSION="2.2.0"
 CURRENT_IP="unknown"
 EXTERNAL_IP=$(curl -s https://api.ipify.org 2>/dev/null || echo "unknown")
 LOG_FILE="/var/log/deploy_full.log"
-BACKUP_DIR="/root/backup_$(date +%Y%m%d_%H%M%S)"
-SYSTEM_UPDATE_STATUS=""
+BACKUP_MARKER="/root/.backup_created"  # Метка создания резервных копий
 IDEMPOTENT_MARKER="/root/.deploy_full_installed"  # Метка завершённой установки
 BASE_DOMAIN=""  # Базовый домен для сервисов (например, kernel.mooo.info)
 
@@ -52,7 +51,10 @@ check_port_available() {
 }
 
 check_internet() {
-    if ! ping -c 1 -W 3 google.com &> /dev/null; then
+    print_info "→ Проверка подключения к google.com..."
+    if ping -c 1 -W 3 google.com &> /dev/null; then
+        print_success "Доступ к интернету подтверждён"
+    else
         print_error "Нет доступа к интернету. Проверьте сетевые настройки."
         exit 1
     fi
@@ -274,28 +276,22 @@ print_success "Запущено с правами root"
 # =============== ЗАПРОС БАЗОВОГО ДОМЕНА ===============
 print_step "Запрос конфигурации домена"
 
-# Проверяем, задан ли BASE_DOMAIN через переменную окружения
 if [ -z "$BASE_DOMAIN" ]; then
     if [ -t 0 ]; then
-        # Если stdin — терминал (локальный запуск), запрашиваем ввод
         read -rp "Введите ваш базовый домен (например, kernel.mooo.info): " BASE_DOMAIN
     else
-        # Если stdin — pipe (curl | bash), требуем задания через переменную
         print_error "Скрипт запущен через pipe. Укажите домен через переменную:"
         print_error "BASE_DOMAIN=ваш.домен curl -fsSL https://raw.githubusercontent.com/triglavfree/deploy/main/scripts/vps/install-full.sh | sudo -E bash"
         exit 1
     fi
 fi
 
-# Валидация домена
 if [ -z "$BASE_DOMAIN" ]; then
     print_error "Базовый домен не может быть пустым!"
     exit 1
 fi
 
-# Убираем лишние пробелы
 BASE_DOMAIN=$(echo "$BASE_DOMAIN" | sed 's/^[ \t]*//;s/[ \t]*$//')
-
 print_success "Используется домен: $BASE_DOMAIN"
 print_info "Поддомены будут созданы автоматически:"
 print_info "  • n8n.$BASE_DOMAIN"
@@ -304,14 +300,13 @@ print_info "  • xui.$BASE_DOMAIN"
 
 # =============== РЕЗЕРВНЫЕ КОПИИ ===============
 print_step "Создание резервных копий (если ещё не созданы)"
-BACKUP_MARKER="/root/.backup_created"
 if [ ! -f "$BACKUP_MARKER" ]; then
     BACKUP_DIR="/root/backup_$(date +%Y%m%d_%H%M%S)"
     mkdir -p "$BACKUP_DIR"
     cp /etc/ssh/sshd_config "$BACKUP_DIR/" 2>/dev/null || true
     cp /etc/sysctl.conf "$BACKUP_DIR/" 2>/dev/null || true
     cp /etc/fstab "$BACKUP_DIR/" 2>/dev/null || true
-    print_success "Резервные копии: $BACKUP_DIR"
+    print_success "Резервные копии созданы в: $BACKUP_DIR"
     touch "$BACKUP_MARKER"
 else
     print_info "Резервные копии уже созданы — пропускаем"
@@ -337,16 +332,8 @@ fi
 print_success "ОС: $PRETTY_NAME"
 
 # =============== ПРОВЕРКА ИНТЕРНЕТА ===============
-# Проверка доступа к интернету
-check_internet() {
-    print_info "→ Проверка подключения к google.com..."
-    if ping -c 1 -W 3 google.com &> /dev/null; then
-        print_success "Доступ к интернету подтверждён"
-    else
-        print_error "Нет доступа к интернету. Проверьте сетевые настройки."
-        exit 1
-    fi
-}
+print_step "Проверка доступа к интернету"
+check_internet
 
 # =============== ПРОВЕРКА GLIBC ===============
 print_step "Проверка версии GLIBC"
@@ -427,79 +414,51 @@ ufw allow 8443 comment "VS Code Server" >/dev/null 2>&1
 ufw --force enable >/dev/null 2>&1
 print_success "UFW активирован"
 
-# Отключение паролей в SSH (только ключи!)
+# =============== ОТКЛЮЧЕНИЕ ПАРОЛЕЙ В SSH ===============
+print_step "Отключение парольной аутентификации"
+
 SSH_CONFIG_BACKUP="/etc/ssh/sshd_config.before_disable_passwords"
+
+# Создаём резервную копию ТОЛЬКО если её нет
 if [ ! -f "$SSH_CONFIG_BACKUP" ]; then
     print_info "→ Создание резервной копии SSH-конфигурации..."
     cp /etc/ssh/sshd_config "$SSH_CONFIG_BACKUP"
-    
+fi
+
+# Отключаем пароли (только если ещё не отключены)
+if ! grep -q "^PasswordAuthentication no" /etc/ssh/sshd_config; then
     print_info "→ Отключение паролей в SSH..."
-    # Безопасное изменение конфигурации с проверкой
-    if ! grep -q "^PasswordAuthentication" /etc/ssh/sshd_config; then
-        echo "PasswordAuthentication no" >> /etc/ssh/sshd_config
-    else
-        sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
-    fi
+    sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+    sed -i 's/^#\?ChallengeResponseAuthentication.*/ChallengeResponseAuthentication no/' /etc/ssh/sshd_config
     
-    if ! grep -q "^ChallengeResponseAuthentication" /etc/ssh/sshd_config; then
-        echo "ChallengeResponseAuthentication no" >> /etc/ssh/sshd_config
-    else
-        sed -i 's/^#\?ChallengeResponseAuthentication.*/ChallengeResponseAuthentication no/' /etc/ssh/sshd_config
-    fi
-    
-    # Проверяем конфигурацию БЕЗ перенаправления в /dev/null
-    print_info "→ Проверка конфигурации SSH..."
+    # Проверяем конфигурацию
     if sshd -t; then
-        print_success "→ Конфигурация SSH валидна"
-        
-        # Определяем имя SSH-сервиса
         SSH_SERVICE="ssh"
         if systemctl list-unit-files --quiet | grep -q '^sshd\.service'; then
             SSH_SERVICE="sshd"
         fi
         
-        print_info "→ Перезагрузка SSH-сервиса ($SSH_SERVICE)..."
-        if systemctl reload "$SSH_SERVICE" 2>/dev/null; then
+        # Перезагружаем сервис
+        if systemctl reload "$SSH_SERVICE" 2>/dev/null || systemctl restart "$SSH_SERVICE"; then
             sleep 2
             if systemctl is-active --quiet "$SSH_SERVICE"; then
                 print_success "Пароли в SSH отключены. Доступ — только по ключу!"
             else
-                print_warning "SSH-сервис не активен. Попытка перезапуска..."
-                systemctl restart "$SSH_SERVICE"
-                sleep 2
-                if systemctl is-active --quiet "$SSH_SERVICE"; then
-                    print_success "SSH успешно перезапущен"
-                else
-                    print_error "Не удалось запустить SSH после изменения конфигурации!"
-                    print_info "→ Восстановление оригинальной конфигурации..."
-                    cp "$SSH_CONFIG_BACKUP" /etc/ssh/sshd_config
-                    systemctl restart "$SSH_SERVICE"
-                    exit 1
-                fi
-            fi
-        else
-            print_warning "Не удалось перезагрузить SSH, пробуем перезапуск..."
-            systemctl restart "$SSH_SERVICE"
-            sleep 2
-            if systemctl is-active --quiet "$SSH_SERVICE"; then
-                print_success "SSH успешно перезапущен"
-            else
-                print_error "Не удалось запустить SSH после изменения конфигурации!"
-                print_info "→ Восстановление оригинальной конфигурации..."
-                cp "$SSH_CONFIG_BACKUP" /etc/ssh/sshd_config
-                systemctl restart "$SSH_SERVICE"
+                print_error "SSH не активен после перезагрузки!"
                 exit 1
             fi
+        else
+            print_error "Не удалось перезагрузить SSH-сервис!"
+            exit 1
         fi
     else
         print_error "Ошибка в конфигурации SSH!"
-        print_info "→ Восстановление оригинальной конфигурации..."
-        cp "$SSH_CONFIG_BACKUP" /etc/ssh/sshd_config
         exit 1
     fi
 else
     print_info "SSH уже настроен без паролей — пропускаем"
 fi
+
 # Fail2ban — защита от брутфорса
 SSH_PORT=$(grep -Po '^Port \K\d+' /etc/ssh/sshd_config 2>/dev/null || echo 22)
 mkdir -p /etc/fail2ban/jail.d
@@ -891,7 +850,7 @@ print_info "После настройки DNS выполните:"
 print_info "certbot --nginx --non-interactive --agree-tos --email admin@$BASE_DOMAIN -d n8n.$BASE_DOMAIN -d vscode.$BASE_DOMAIN -d xui.$BASE_DOMAIN"
 
 print_info "Лог установки: $LOG_FILE"
-print_info "Резервные копии: $BACKUP_DIR"
+print_info "Резервные копии: созданы один раз при первом запуске"
 
 if [ -f /var/run/reboot-required ]; then
     print_warning "Требуется перезагрузка для завершения обновлений!"
