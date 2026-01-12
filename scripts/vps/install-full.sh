@@ -2,7 +2,7 @@
 set -e
 
 # ================================================
-# 🛠️ СКРИПТ УСТАНОВКИ ПОЛНОЙ КОНФИГУРАЦИИ VPS
+# СКРИПТ УСТАНОВКИ ПОЛНОЙ КОНФИГУРАЦИИ VPS
 # Для Ubuntu 24.04 LTS, vCPU x2, RAM 4GB, 60GB HDD
 # Автор: triglavfree
 # Репозиторий: https://github.com/triglavfree/DEPLOY
@@ -10,7 +10,7 @@ set -e
 
 # =============== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===============
 REPO_URL="https://raw.githubusercontent.com/triglavfree/deploy/main"
-SCRIPT_VERSION="1.2.0"
+SCRIPT_VERSION="1.3.0"
 CURRENT_IP="unknown"                   # IP клиента (откуда идёт SSH-подключение)
 EXTERNAL_IP="unknown"                  # Внешний IP сервера
 LOG_FILE="/var/log/deploy_full.log"    # Лог всех действий
@@ -28,10 +28,10 @@ NC='\033[0m'                           # Сброс цвета
 
 # =============== ФУНКЦИИ ===============
 print_step()   { echo -e "\n${PURPLE}=== ${CYAN}$1${PURPLE} ===${NC}"; }
-print_success(){ echo -e "${GREEN}✓ $1${NC}"; }
-print_warning(){ echo -e "${YELLOW}⚠ $1${NC}"; }
-print_error()  { echo -e "${RED}✗ $1${NC}" >&2; }
-print_info()   { echo -e "${BLUE}ℹ $1${NC}"; }
+print_success(){ echo -e "${GREEN}[OK] $1${NC}"; }
+print_warning(){ echo -e "${YELLOW}[WARN] $1${NC}"; }
+print_error()  { echo -e "${RED}[ERROR] $1${NC}" >&2; }
+print_info()   { echo -e "${BLUE}[INFO] $1${NC}"; }
 
 # Логирование в файл
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"; }
@@ -55,40 +55,40 @@ check_port_available() {
 # Проверка доступа к интернету
 check_internet() {
     if ! ping -c 1 -W 3 google.com &> /dev/null; then
-        print_error "❌ Нет доступа к интернету. Проверьте сетевые настройки."
+        print_error "Нет доступа к интернету. Проверьте сетевые настройки."
         exit 1
     fi
 }
 
-# Проверка версии GLIBC (требуется ≥2.32 для Ubuntu 24.04)
+# Проверка версии GLIBC (требуется >=2.32 для Ubuntu 24.04)
 check_glibc_version() {
     glibc_version=$(ldd --version | head -n1 | awk '{print $NF}')
     required_version="2.32"
     if [[ "$(printf '%s\n' "$required_version" "$glibc_version" | sort -V | head -n1)" != "$required_version" ]]; then
-        print_error "❌ Ваша версия GLIBC ($glibc_version) устарела. Требуется минимум 2.32."
+        print_error "Ваша версия GLIBC ($glibc_version) устарела. Требуется минимум 2.32."
         print_error "   Убедитесь, что вы используете Ubuntu 24.04 LTS."
         exit 1
     fi
-    print_info "✅ GLIBC версия: $glibc_version (подходит)"
+    print_info "GLIBC версия: $glibc_version (подходит)"
 }
 
 # Проверка свободного места на диске (минимум 10 ГБ)
 check_disk_space() {
     local free_space_gb=$(df -BG / | awk 'NR==2 {print $4}' | sed 's/G//')
     if [ "$free_space_gb" -lt 10 ]; then
-        print_error "❌ Недостаточно места на диске. Требуется минимум 10 ГБ, у вас: ${free_space_gb} ГБ"
+        print_error "Недостаточно места на диске. Требуется минимум 10 ГБ, у вас: ${free_space_gb} ГБ"
         exit 1
     fi
-    print_info "✅ Достаточно места: ${free_space_gb} ГБ"
+    print_info "Достаточно места: ${free_space_gb} ГБ"
 }
 
 # Проверка статуса сервиса и вывод деталей при ошибке
 check_service_status() {
     local service=$1
     if systemctl is-active --quiet "$service"; then
-        print_success "✅ Сервис $service активен"
+        print_success "Сервис $service активен"
     else
-        print_error "❌ Сервис $service НЕ АКТИВЕН!"
+        print_error "Сервис $service НЕ АКТИВЕН!"
         systemctl status "$service" --no-pager -l | head -n 8
         return 1
     fi
@@ -119,71 +119,71 @@ apply_max_performance_optimizations() {
     fi
 
     if [ "$needs_update" = true ]; then
-        print_info "🔄 Применение максимальных оптимизаций ядра (BBR, TCP, память)..."
+        print_info "Применение максимальных оптимизаций ядра (BBR, TCP, память)..."
         mkdir -p /etc/sysctl.d
 
         # Загружаем модуль tcp_bbr, если не загружен
         if ! lsmod | grep -q "tcp_bbr"; then
             if modprobe tcp_bbr 2>/dev/null; then
-                print_info "🔧 Модуль ядра tcp_bbr загружен."
+                print_info "Модуль ядра tcp_bbr загружен."
                 echo "tcp_bbr" > /etc/modules-load.d/tcp-bbr.conf
             else
-                print_warning "⚠ Не удалось загрузить модуль tcp_bbr. BBR может не работать."
+                print_warning "Не удалось загрузить модуль tcp_bbr. BBR может не работать."
             fi
         else
-            print_info "🔧 Модуль tcp_bbr уже загружен."
+            print_info "Модуль tcp_bbr уже загружен."
         fi
 
         # Записываем полный конфиг оптимизаций
         cat > "$config_file" << 'EOF'
 # BBR congestion control
-net.core.default_qdisc = fq               # Контроллер очереди для BBR
-net.ipv4.tcp_congestion_control = bbr     # Современный алгоритм контроля перегрузки
-net.ipv4.tcp_fastopen = 3                 # Ускорение установки соединений
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+net.ipv4.tcp_fastopen = 3
 
 # Сетевые буферы
-net.core.rmem_max = 67108864              # Макс. размер буфера приема (64MB)
-net.core.wmem_max = 67108864              # Макс. размер буфера передачи (64MB)
-net.core.rmem_default = 131072            # Стандартный размер буфера приема
-net.core.wmem_default = 131072            # Стандартный размер буфера передачи
-net.ipv4.tcp_rmem = 4096 87380 67108864   # Динамические буферы приема TCP
-net.ipv4.tcp_wmem = 4096 65536 67108864   # Динамические буферы передачи TCP
-net.ipv4.tcp_mem = 786432 1048576 1572864 # Память для TCP соединений
+net.core.rmem_max = 67108864
+net.core.wmem_max = 67108864
+net.core.rmem_default = 131072
+net.core.wmem_default = 131072
+net.ipv4.tcp_rmem = 4096 87380 67108864
+net.ipv4.tcp_wmem = 4096 65536 67108864
+net.ipv4.tcp_mem = 786432 1048576 1572864
 
 # Лимиты подключений
-net.core.somaxconn = 65535                # Макс. длина очереди accept() (65K)
-net.core.netdev_max_backlog = 65536       # Макс. очередь для сетевых устройств
-net.ipv4.tcp_max_syn_backlog = 65536      # Макс. очередь SYN-запросов
-net.ipv4.tcp_max_tw_buckets = 1440000     # Макс. TIME-WAIT бакетов
+net.core.somaxconn = 65535
+net.core.netdev_max_backlog = 65536
+net.ipv4.tcp_max_syn_backlog = 65536
+net.ipv4.tcp_max_tw_buckets = 1440000
 
 # Оптимизация TCP
-net.ipv4.tcp_slow_start_after_idle = 0    # Отключить медленный старт после простоя
-net.ipv4.tcp_synack_retries = 2           # Повторы SYN-ACK (быстрый отказ)
-net.ipv4.tcp_syn_retries = 3              # Повторы SYN (быстрый отказ)
-net.ipv4.tcp_retries2 = 8                 # Повторы для установившихся соединений
-net.ipv4.tcp_tw_reuse = 1                 # Reuse TIME-WAIT сокетов
-net.ipv4.tcp_fin_timeout = 30             # Таймаут FIN пакетов
+net.ipv4.tcp_slow_start_after_idle = 0
+net.ipv4.tcp_synack_retries = 2
+net.ipv4.tcp_syn_retries = 3
+net.ipv4.tcp_retries2 = 8
+net.ipv4.tcp_tw_reuse = 1
+net.ipv4.tcp_fin_timeout = 30
 
 # Keepalive настройки
-net.ipv4.tcp_keepalive_time = 300         # Интервал проверки живости (5 мин)
-net.ipv4.tcp_keepalive_probes = 5         # Количество проверок перед разрывом
-net.ipv4.tcp_keepalive_intvl = 15         # Интервал между проверками (15 сек)
+net.ipv4.tcp_keepalive_time = 300
+net.ipv4.tcp_keepalive_probes = 5
+net.ipv4.tcp_keepalive_intvl = 15
 
 # Безопасность и стабильность
-net.ipv4.tcp_syncookies = 1               # Защита от SYN-флуд атак
-net.ipv4.ip_forward = 1                   # Важно для роутеров/шлюзов
+net.ipv4.tcp_syncookies = 1
+net.ipv4.ip_forward = 1
 
 # VM параметры оптимизации памяти
-vm.swappiness = 30                        # Контроль использования swap
-vm.vfs_cache_pressure = 100               # Баланс кэширования
-vm.dirty_background_ratio = 5             # Начинать фоновую запись при 5% dirty
-vm.dirty_ratio = 15                       # Макс. dirty pages перед блокировкой
-vm.overcommit_memory = 1                  # Агрессивный overcommit памяти
+vm.swappiness = 30
+vm.vfs_cache_pressure = 100
+vm.dirty_background_ratio = 5
+vm.dirty_ratio = 15
+vm.overcommit_memory = 1
 
 # Дополнительные оптимизации
-fs.file-max = 2097152                     # Макс. количество файловых дескрипторов
-fs.inotify.max_user_watches = 524288      # Макс. наблюдений за файлами
-fs.inotify.max_user_instances = 512       # Макс. экземпляров inotify
+fs.file-max = 2097152
+fs.inotify.max_user_watches = 524288
+fs.inotify.max_user_instances = 512
 EOF
 
         # Применяем настройки
@@ -191,31 +191,18 @@ EOF
 
         # Проверяем, что BBR действительно активен
         if sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null | grep -q "^bbr$"; then
-            print_success "✅ Максимальные оптимизации ядра применены (BBR активен)"
+            print_success "Максимальные оптимизации ядра применены (BBR активен)"
         else
-            print_warning "⚠ Оптимизации применены, но BBR не активен. Проверьте: modprobe tcp_bbr"
+            print_warning "Оптимизации применены, но BBR не активен. Проверьте: modprobe tcp_bbr"
         fi
     else
-        print_info "✅ Максимальные оптимизации ядра уже настроены"
-        # Убедимся, что модуль загружен и BBR активен (на случай, если sysctl не сработал ранее)
-        if ! lsmod | grep -q "tcp_bbr"; then
-            if modprobe tcp_bbr 2>/dev/null; then
-                echo "tcp_bbr" > /etc/modules-load.d/tcp-bbr.conf
-                sysctl -p "$config_file" >/dev/null 2>&1
-                print_info "🔧 Модуль tcp_bbr загружен и настройки применены"
-            fi
-        else
-            if ! sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null | grep -q "^bbr$"; then
-                sysctl -w net.ipv4.tcp_congestion_control=bbr >/dev/null 2>&1
-                print_info "🔧 BBR включён через sysctl"
-            fi
-        fi
+        print_info "Максимальные оптимизации ядра уже настроены"
     fi
 }
 
 # Проверка безопасности SSH доступа — только по ключам!
 check_ssh_access_safety() {
-    print_step "🔒 Проверка безопасности SSH доступа"
+    print_step "Проверка безопасности SSH доступа"
 
     # Определяем IP клиента (откуда идёт SSH-подключение)
     if [ -n "$SSH_CLIENT" ]; then
@@ -225,23 +212,23 @@ check_ssh_access_safety() {
     fi
 
     if [ -n "$CURRENT_IP" ]; then
-        print_info "🌐 Ваш IP-адрес: ${CURRENT_IP}"
+        print_info "Ваш IP-адрес: ${CURRENT_IP}"
     else
-        print_info "🌐 IP не определён (возможно, вы подключились через консоль провайдера)"
+        print_info "IP не определён (возможно, вы подключились через консоль провайдера)"
     fi
 
     # Проверяем наличие валидных SSH-ключей
     if [ -f /root/.ssh/authorized_keys ] && [ -s /root/.ssh/authorized_keys ]; then
         if grep -qE '^(ssh-rsa|ssh-ed25519|ecdsa-sha2-nistp[0-9]+)' /root/.ssh/authorized_keys; then
-            print_success "🔑 Действующие SSH-ключи для root обнаружены."
+            print_success "Действующие SSH-ключи для root обнаружены."
             return 0
         fi
     fi
 
     # Ключей нет — требуем настройку
-    print_warning "⚠ SSH-ключи для root НЕ настроены!"
+    print_warning "SSH-ключи для root НЕ настроены!"
     echo
-    print_info "🔧 Настройте SSH-ключи на своём компьютере:"
+    print_info "Настройте SSH-ключи на своём компьютере:"
     print_info "1. Создайте ключ (если ещё нет): ssh-keygen -t ed25519 -C \"ваш_email@example.com\""
     print_info "2. Скопируйте публичный ключ на сервер:"
     print_info "   ssh-copy-id root@ваш_сервер_ip"
@@ -249,8 +236,8 @@ check_ssh_access_safety() {
     print_info "3. Установите права:"
     print_info "   chmod 700 /root/.ssh && chmod 600 /root/.ssh/authorized_keys"
     echo
-    print_info "🔄 После настройки — запустите скрипт снова."
-    print_success "🛑 Скрипт завершён. Без SSH-ключей дальнейшая установка невозможна."
+    print_info "После настройки — запустите скрипт снова."
+    print_success "Скрипт завершён. Без SSH-ключей дальнейшая установка невозможна."
     exit 0
 }
 
@@ -262,87 +249,105 @@ check_ssh_access_safety() {
 } >> "$LOG_FILE"
 
 # =============== ПРОВЕРКА ПРАВ ===============
-print_step "🔑 Проверка прав"
+print_step "Проверка прав"
 if [ "$(id -u)" != "0" ]; then
-    print_error "❗ Запускайте скрипт от root (используйте sudo)!"
+    print_error "Запускайте скрипт от root (используйте sudo)!"
     exit 1
 fi
-print_success "✅ Запущено с правами root"
+print_success "Запущено с правами root"
 
 # =============== РЕЗЕРВНЫЕ КОПИИ ===============
-print_step "💾 Создание резервных копий"
+print_step "Создание резервных копий"
 mkdir -p "$BACKUP_DIR"
 cp /etc/ssh/sshd_config "$BACKUP_DIR/" 2>/dev/null || true
 cp /etc/sysctl.conf "$BACKUP_DIR/" 2>/dev/null || true
 cp /etc/fstab "$BACKUP_DIR/" 2>/dev/null || true
-print_success "✅ Резервные копии созданы в: $BACKUP_DIR"
+print_success "Резервные копии созданы в: $BACKUP_DIR"
 
 # =============== ПРОВЕРКА SSH ===============
 check_ssh_access_safety
 
 # =============== ПРОВЕРКА ОС ===============
-print_step "🖥️ Проверка операционной системы"
+print_step "Проверка операционной системы"
 if [ ! -f /etc/os-release ]; then
-    print_error "❗ Неизвестная ОС"
+    print_error "Неизвестная ОС"
     exit 1
 fi
 source /etc/os-release
 
 if [ "$ID" != "ubuntu" ] || [ "$VERSION_ID" != "24.04" ]; then
-    print_warning "⚠ Скрипт предназначен для Ubuntu 24.04 LTS. Ваша ОС: $PRETTY_NAME"
+    print_warning "Скрипт предназначен для Ubuntu 24.04 LTS. Ваша ОС: $PRETTY_NAME"
     read -rp "${YELLOW}Продолжить? (y/n) [y]: ${NC}" confirm
     confirm=${confirm:-y}
     [[ ! "$confirm" =~ ^[Yy]$ ]] && exit 1
 fi
-print_success "✅ ОС: $PRETTY_NAME"
+print_success "ОС: $PRETTY_NAME"
 
 # =============== ПРОВЕРКА ИНТЕРНЕТА ===============
-print_step "🌐 Проверка доступа к интернету"
+print_step "Проверка доступа к интернету"
 check_internet
 
 # =============== ПРОВЕРКА GLIBC ===============
-print_step "🧩 Проверка версии GLIBC"
+print_step "Проверка версии GLIBC"
 check_glibc_version
 
 # =============== ПРОВЕРКА СВОБОДНОГО МЕСТА ===============
-print_step "💾 Проверка свободного места на диске"
+print_step "Проверка свободного места на диске"
 check_disk_space
 
 # =============== ОБНОВЛЕНИЕ СИСТЕМЫ ===============
-print_step "🔄 Обновление системы"
+print_step "Обновление системы"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -yqq >/dev/null 2>&1 || true
 apt-get upgrade -yqq --no-install-recommends >/dev/null 2>&1 || true
 apt-get autoremove -yqq >/dev/null 2>&1 || true
 apt-get clean >/dev/null 2>&1 || true
 SYSTEM_UPDATE_STATUS=$(check_if_fully_updated)
-print_success "✅ Система обновлена: $SYSTEM_UPDATE_STATUS"
+print_success "Система обновлена: $SYSTEM_UPDATE_STATUS"
 
 # =============== УСТАНОВКА БАЗОВЫХ ПАКЕТОВ ===============
-print_step "📦 Установка базовых пакетов"
-PACKAGES=("curl" "wget" "git" "unzip" "tar" "net-tools" "ufw" "fail2ban" "nginx" "python3" "python3-pip" "python3-venv" "openssl" "iproute2" "dnsutils" "procps" "findutils" "shadow" "coreutils" "gzip" "iputils-ping" "ethtool" "sysvinit-utils" "sed" "passwd" "iptables" "libssl-dev")
+print_step "Установка базовых пакетов"
+
+# Список пакетов. Обратите внимание: shadow исключён из списка,
+# потому что он является частью базовой системы и не должен устанавливаться отдельно.
+PACKAGES=("curl" "wget" "git" "unzip" "tar" "net-tools" "ufw" "fail2ban" "nginx" "python3" "python3-pip" "python3-venv" "openssl" "iproute2" "dnsutils" "procps" "findutils" "coreutils" "gzip" "iputils-ping" "ethtool" "sysvinit-utils" "sed" "passwd" "iptables" "libssl-dev" "ca-certificates")
 
 INSTALLED_PACKAGES=()
+
 for pkg in "${PACKAGES[@]}"; do
-    if ! dpkg -l | grep -q "^ii  $pkg "; then
+    # Для большинства пакетов проверяем через dpkg-query
+    if ! dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q "^install ok installed$"; then
         print_info "→ Установка $pkg..."
         if apt-get install -yqq "$pkg" >/dev/null 2>&1; then
             INSTALLED_PACKAGES+=("$pkg")
         else
-            print_error "❌ Ошибка установки $pkg"
+            print_error "Ошибка установки $pkg"
             exit 1
         fi
     fi
 done
 
-if [ ${#INSTALLED_PACKAGES[@]} -gt 0 ]; then
-    print_success "✅ Установлено пакетов: ${#INSTALLED_PACKAGES[@]}"
+# Отдельная проверка для shadow: проверяем наличие бинарников, а не пакета
+if ! command -v passwd >/dev/null 2>&1; then
+    print_info "→ Установка системного пакета shadow (управление пользователями)..."
+    if apt-get install -yqq shadow >/dev/null 2>&1; then
+        INSTALLED_PACKAGES+=("shadow")
+    else
+        print_error "Ошибка установки shadow"
+        exit 1
+    fi
 else
-    print_success "✅ Все пакеты уже установлены"
+    print_info "→ Системные утилиты управления пользователями (passwd, useradd) уже установлены"
+fi
+
+if [ ${#INSTALLED_PACKAGES[@]} -gt 0 ]; then
+    print_success "Установлено пакетов: ${#INSTALLED_PACKAGES[@]}"
+else
+    print_success "Все пакеты уже установлены"
 fi
 
 # =============== НАСТРОЙКА БЕЗОПАСНОСТИ ===============
-print_step "🛡️ Настройка безопасности"
+print_step "Настройка безопасности"
 
 # UFW — брандмауэр
 ufw --force reset >/dev/null 2>&1 || true
@@ -350,15 +355,15 @@ ufw default deny incoming >/dev/null 2>&1
 ufw default allow outgoing >/dev/null 2>&1
 if [ -n "$CURRENT_IP" ]; then
     ufw allow from "$CURRENT_IP" to any port 22 comment "SSH с доверенного IP" >/dev/null 2>&1
-    print_success "✅ UFW: SSH разрешён только с $CURRENT_IP"
+    print_success "UFW: SSH разрешён только с $CURRENT_IP"
 else
     ufw allow 22 comment "SSH (глобально)" >/dev/null 2>&1
-    print_warning "⚠ UFW: SSH разрешён для всех (IP не определён)"
+    print_warning "UFW: SSH разрешён для всех (IP не определён)"
 fi
 ufw allow 80 comment "HTTP" >/dev/null 2>&1
 ufw allow 443 comment "HTTPS" >/dev/null 2>&1
 ufw --force enable >/dev/null 2>&1
-print_success "✅ UFW активирован"
+print_success "UFW активирован"
 
 # Отключение паролей в SSH (только ключи!)
 SSH_CONFIG_BACKUP="/etc/ssh/sshd_config.before_disable_passwords"
@@ -371,16 +376,16 @@ if sshd -t; then
     systemctl reload "$SSH_SERVICE" || systemctl restart "$SSH_SERVICE"
     sleep 2
     if systemctl is-active --quiet "$SSH_SERVICE"; then
-        print_success "✅ Пароли в SSH отключены. Доступ — только по ключу!"
+        print_success "Пароли в SSH отключены. Доступ — только по ключу!"
     else
         cp "$SSH_CONFIG_BACKUP" /etc/ssh/sshd_config
         systemctl restart "$SSH_SERVICE"
-        print_error "❌ SSH не запустился! Конфигурация восстановлена."
+        print_error "SSH не запустился! Конфигурация восстановлена."
         exit 1
     fi
 else
     cp "$SSH_CONFIG_BACKUP" /etc/ssh/sshd_config
-    print_error "❌ Ошибка в конфигурации SSH! Восстановлено."
+    print_error "Ошибка в конфигурации SSH! Восстановлено."
     exit 1
 fi
 
@@ -400,27 +405,27 @@ backend = systemd
 action = %(action_)s
 EOF
     systemctl restart fail2ban 2>/dev/null || true
-    print_success "✅ Fail2Ban настроен: защищает SSH (порт $SSH_PORT)"
+    print_success "Fail2Ban настроен: защищает SSH (порт $SSH_PORT)"
 else
-    print_info "ℹ Fail2Ban уже настроен"
+    print_info "Fail2Ban уже настроен"
 fi
 
 # =============== ОПТИМИЗАЦИЯ СИСТЕМЫ ===============
-print_step "⚡ Оптимизация ядра и памяти"
+print_step "Оптимизация ядра и памяти"
 TOTAL_MEM_MB=$(free -m | awk '/^Mem:/{print $2}')
-print_info "🧠 Обнаружено RAM: ${TOTAL_MEM_MB} MB"
+print_info "Обнаружено RAM: ${TOTAL_MEM_MB} MB"
 
 apply_max_performance_optimizations
 
 # Настройка swap-файла
-print_step "💾 Настройка swap-файла"
+print_step "Настройка swap-файла"
 if ! swapon --show | grep -q '/swapfile'; then
     if [ "$TOTAL_MEM_MB" -le 4096 ]; then
         SWAP_SIZE_MB=2048
     else
         SWAP_SIZE_MB=1024
     fi
-    print_info "💾 Создание swap-файла: ${SWAP_SIZE_MB} МБ"
+    print_info "Создание swap-файла: ${SWAP_SIZE_MB} МБ"
     if ! fallocate -l ${SWAP_SIZE_MB}M /swapfile >/dev/null 2>&1; then
         dd if=/dev/zero of=/swapfile bs=1M count=$SWAP_SIZE_MB status=none
     fi
@@ -430,45 +435,61 @@ if ! swapon --show | grep -q '/swapfile'; then
     if ! grep -q '/swapfile' /etc/fstab; then
         echo '/swapfile none swap sw 0 0' >> /etc/fstab
     fi
-    print_success "✅ Swap ${SWAP_SIZE_MB} МБ успешно создан"
+    print_success "Swap ${SWAP_SIZE_MB} МБ успешно создан"
 else
-    print_success "✅ Swap уже активен"
+    print_success "Swap уже активен"
 fi
 
 # =============== УСТАНОВКА NODE.JS ===============
-print_step "node.js Установка Node.js"
+print_step "Установка Node.js"
 curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - >/dev/null 2>&1
 apt-get install -yqq nodejs >/dev/null 2>&1
-print_success "✅ Node.js установлен: $(node -v)"
+print_success "Node.js установлен: $(node -v)"
 
 # =============== УСТАНОВКА ГЛОБАЛЬНЫХ NPM ПАКЕТОВ ===============
-print_step "📦 Установка глобальных npm пакетов"
+print_step "Установка глобальных npm пакетов"
 
 # Установка n8n
 npm install -g n8n >/dev/null 2>&1
-print_success "✅ n8n установлен: $(n8n --version)"
+print_success "n8n установлен: $(n8n --version)"
 
 # Установка qwen-code
 npm install -g @qwen-code/qwen-code@latest >/dev/null 2>&1
-print_success "✅ qwen-code установлен"
+print_success "qwen-code установлен"
 
 # =============== НАСТРОЙКА QWEN-CODE С MCP SERVER CONTEXT7 ===============
-print_step "🔑 Настройка qwen-code с MCP сервером Context7"
+print_step "Настройка qwen-code с MCP сервером Context7"
 
-# Запрашиваем API ключ у пользователя
+# Запрашиваем API ключ у пользователя.
+# ВАЖНО: этот блок должен выполняться только при прямом запуске скрипта,
+# а не через pipe (curl | bash), иначе read не сработает.
+# Поэтому рекомендуется скачивать скрипт и запускать локально.
+
 if [ -z "$CONTEXT7_API_KEY" ]; then
-    read -rp "🔒 Введите ваш CONTEXT7_API_KEY для Context7 (не оставляйте пустым): " CONTEXT7_API_KEY
+    # Проверяем, запущен ли скрипт через pipe
+    if [ -t 0 ]; then
+        # stdin — терминал, можно читать
+        read -rp "Введите ваш CONTEXT7_API_KEY для Context7 (не оставляйте пустым): " CONTEXT7_API_KEY
+    else
+        # stdin — pipe, нельзя читать → ошибка
+        print_error "Скрипт запущен через pipe (например, curl | bash)."
+        print_error "Для интерактивного ввода CONTEXT7_API_KEY:"
+        print_error "1. Скачайте скрипт: curl -O https://raw.githubusercontent.com/triglavfree/deploy/main/scripts/vps/install-full.sh"
+        print_error "2. Сделайте исполняемым: chmod +x install-full.sh"
+        print_error "3. Запустите: sudo -E ./install-full.sh"
+        exit 1
+    fi
 fi
 
 # Проверка на пустоту
 if [ -z "$CONTEXT7_API_KEY" ]; then
-    print_error "❌ CONTEXT7_API_KEY не может быть пустым!"
+    print_error "CONTEXT7_API_KEY не может быть пустым!"
     exit 1
 fi
 
 # Проверка формата ключа (по шаблону ctx7sk-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
 if ! [[ "$CONTEXT7_API_KEY" =~ ^ctx7sk-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$ ]]; then
-    print_warning "⚠ Формат CONTEXT7_API_KEY кажется неправильным. Убедитесь, что вы ввели корректный ключ."
+    print_warning "Формат CONTEXT7_API_KEY кажется неправильным. Убедитесь, что вы ввели корректный ключ."
     read -rp "Продолжить? (y/n) [y]: " confirm
     confirm=${confirm:-y}
     [[ ! "$confirm" =~ ^[yY]$ ]] && exit 1
@@ -483,7 +504,7 @@ cat > ~/.qwen/settings.json <<EOF
       "selectedType": "qwen-oauth"
     }
   },
-  "$version": 2,
+  "\$version": 2,
   "general": {
     "language": "ru"
   },
@@ -499,16 +520,16 @@ cat > ~/.qwen/settings.json <<EOF
 }
 EOF
 chmod 600 ~/.qwen/settings.json
-print_success "✅ qwen-code настроен с MCP сервером Context7"
-print_info "   Конфиг сохранён в: ~/.qwen/settings.json"
+print_success "qwen-code настроен с MCP сервером Context7"
+print_info "Конфиг сохранён в: ~/.qwen/settings.json"
 
 # =============== УСТАНОВКА PYTHON И UV ===============
-print_step "🐍 Установка Python и uv"
+print_step "Установка Python и uv"
 pip3 install uv --break-system-packages >/dev/null 2>&1
-print_success "✅ uv установлен для управления Python пакетами"
+print_success "uv установлен для управления Python пакетами"
 
 # =============== УСТАНОВКА VS CODE SERVER ===============
-print_step "💻 Установка VS Code Server"
+print_step "Установка VS Code Server"
 mkdir -p /opt/code-server
 cd /opt/code-server
 wget https://github.com/coder/code-server/releases/latest/download/code-server-linux-amd64.tar.gz -q
@@ -541,12 +562,12 @@ EOF
 systemctl daemon-reload
 systemctl enable code-server
 systemctl start code-server
-print_success "✅ VS Code Server установлен"
-print_info "   Доступ: http://$EXTERNAL_IP:8443"
-print_info "   Пароль сохранён в: /root/.vscode_password"
+print_success "VS Code Server установлен"
+print_info "Доступ: http://$EXTERNAL_IP:8443"
+print_info "Пароль сохранён в: /root/.vscode_password"
 
 # =============== УСТАНОВКА 3X-UI ===============
-print_step "🚀 Установка 3x-ui"
+print_step "Установка 3x-ui"
 bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh)
 
 # Настройка 3x-ui (генерация случайных данных)
@@ -558,7 +579,7 @@ if [ -f /usr/local/x-ui/x-ui ]; then
 
     # Проверка, свободен ли порт
     if ! check_port_available "$PORT"; then
-        print_warning "⚠ Порт $PORT занят. Генерируем новый..."
+        print_warning "Порт $PORT занят. Генерируем новый..."
         PORT=$(shuf -i 1024-62000 -n 1)
         while ! check_port_available "$PORT"; do
             PORT=$(shuf -i 1024-62000 -n 1)
@@ -578,21 +599,21 @@ if [ -f /usr/local/x-ui/x-ui ]; then
     echo "WebBasePath: $WEBBASEPATH" >> /root/.3xui_credentials
     chmod 600 /root/.3xui_credentials
 
-    print_success "✅ 3x-ui установлен и настроен"
-    print_info "   Данные доступа сохранены в: /root/.3xui_credentials"
+    print_success "3x-ui установлен и настроен"
+    print_info "Данные доступа сохранены в: /root/.3xui_credentials"
 else
-    print_error "❌ Установка 3x-ui не удалась"
+    print_error "Установка 3x-ui не удалась"
     exit 1
 fi
 
 # =============== НАСТРОЙКА Nginx РЕВЕРС ПРОКСИ ===============
-print_step "🌐 Настройка Nginx реверс прокси"
+print_step "Настройка Nginx реверс прокси"
 
 # Конфиг для n8n — принимает любой домен (подходит для freedns.afraid.org)
 cat > /etc/nginx/sites-available/n8n.conf <<EOF
 server {
     listen 80;
-    server_name _;  # ← ВАЖНО: принимает любой домен (n8n.yourdomain.afraid.org, vscode.yourdomain.afraid.org и т.д.)
+    server_name _;
 
     location / {
         proxy_pass http://localhost:5678;
@@ -653,14 +674,14 @@ rm /etc/nginx/sites-enabled/default 2>/dev/null || true
 
 # Проверка конфигурации Nginx перед перезапуском
 if ! nginx -t; then
-    print_error "❌ Ошибка в конфигурации Nginx!"
+    print_error "Ошибка в конфигурации Nginx!"
     exit 1
 fi
 systemctl restart nginx
-print_success "✅ Nginx настроен как реверс прокси"
+print_success "Nginx настроен как реверс прокси"
 
 # =============== ЗАПУСК СЕРВИСОВ ===============
-print_step "▶ Запуск сервисов"
+print_step "Запуск сервисов"
 
 # n8n сервис
 cat > /etc/systemd/system/n8n.service <<EOF
@@ -692,7 +713,7 @@ for service in "${SERVICES[@]}"; do
 done
 
 # =============== ФИНАЛЬНАЯ СВОДКА ===============
-print_step "🎉 ФИНАЛЬНАЯ СВОДКА УСТАНОВКИ"
+print_step "ФИНАЛЬНАЯ СВОДКА УСТАНОВКИ"
 
 print_success "Система:"
 print_info "  • OS: Ubuntu 24.04 LTS"
@@ -730,11 +751,11 @@ print_info "Резервные копии: $BACKUP_DIR"
 
 # Проверка необходимости перезагрузки
 if [ -f /var/run/reboot-required ]; then
-    print_warning "⚠ Требуется перезагрузка для завершения обновлений!"
+    print_warning "Требуется перезагрузка для завершения обновлений!"
     print_info "   Выполните: reboot"
 fi
 
-print_success "✅ Установка завершена успешно!"
+print_success "Установка завершена успешно!"
 print_info "Для доступа к сервисам:"
 print_info "   • n8n: http://n8n.yourdomain.afraid.org"
 print_info "   • VS Code: http://vscode.yourdomain.afraid.org"
@@ -743,15 +764,15 @@ print_info "   Все пароли и ключи сохранены на сер�
 
 # Очистка старых резервных копий (оставляем только последнюю)
 find /root -maxdepth 1 -name "backup_20*" -type d | sort -r | tail -n +2 | xargs rm -rf 2>/dev/null || true
-print_info "🧹 Старые резервные копии удалены. Последняя копия сохранена."
+print_info "Старые резервные копии удалены. Последняя копия сохранена."
 
 # Проверка, что все сервисы запущены
-print_step "📊 Проверка финального состояния"
+print_step "Проверка финального состояния"
 for service in "${SERVICES[@]}"; do
     if systemctl is-active --quiet "$service"; then
-        print_success "  • $service: ✅ активен"
+        print_success "  • $service: активен"
     else
-        print_error "  • $service: ❌ неактивен"
+        print_error "  • $service: неактивен"
     fi
 done
 
