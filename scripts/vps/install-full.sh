@@ -10,7 +10,7 @@ set -e
 
 # =============== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===============
 REPO_URL="https://raw.githubusercontent.com/triglavfree/deploy/main"
-SCRIPT_VERSION="2.0.0"
+SCRIPT_VERSION="2.1.0"
 CURRENT_IP="unknown"
 EXTERNAL_IP=$(curl -s https://api.ipify.org 2>/dev/null || echo "unknown")
 LOG_FILE="/var/log/deploy_full.log"
@@ -119,7 +119,7 @@ apply_max_performance_optimizations() {
                 print_info "Модуль ядра tcp_bbr загружен."
                 echo "tcp_bbr" > /etc/modules-load.d/tcp-bbr.conf
             else
-                print_warning "Не удалось загрузить модуль tcp_bbr. BBR может не активироваться."
+                print_warning "Не удалось загрузить модуль tcp_bbr. BBR может не работать."
             fi
         else
             print_info "Модуль tcp_bbr уже загружен."
@@ -275,11 +275,6 @@ print_success "Запущено с правами root"
 print_step "Запрос конфигурации домена"
 
 # Проверяем, задан ли BASE_DOMAIN через переменную окружения
-if [ -z "$BASE_DOMAIN" ] && [ -n "$1" ]; then
-    BASE_DOMAIN="$1"
-fi
-
-# Если домен не задан через переменную или аргумент, запрашиваем интерактивно
 if [ -z "$BASE_DOMAIN" ]; then
     if [ -t 0 ]; then
         # Если stdin — терминал (локальный запуск), запрашиваем ввод
@@ -287,7 +282,7 @@ if [ -z "$BASE_DOMAIN" ]; then
     else
         # Если stdin — pipe (curl | bash), требуем задания через переменную
         print_error "Скрипт запущен через pipe. Укажите домен через переменную:"
-        print_error "BASE_DOMAIN=ваш.домен curl -fsSL https://.../install-full.sh | sudo -E bash"
+        print_error "BASE_DOMAIN=ваш.домен curl -fsSL https://raw.githubusercontent.com/triglavfree/deploy/main/scripts/vps/install-full.sh | sudo -E bash"
         exit 1
     fi
 fi
@@ -409,7 +404,7 @@ else
 fi
 
 # Открываем порты для сервисов
-ufw allow 80 comment "HTTP" >/dev/null 2>&1
+ufw allow 80 comment "HTTP (Let's Encrypt + Nginx)" >/dev/null 2>&1
 ufw allow 443 comment "HTTPS" >/dev/null 2>&1
 ufw allow 5678 comment "n8n" >/dev/null 2>&1
 ufw allow 8443 comment "VS Code Server" >/dev/null 2>&1
@@ -539,7 +534,7 @@ else
             read -rp "Введите ваш CONTEXT7_API_KEY для Context7 (не оставляйте пустым): " CONTEXT7_API_KEY
         else
             print_error "Скрипт запущен через pipe. Для интерактивного ввода:"
-            print_error "curl -O https://.../install-full.sh && chmod +x install-full.sh && sudo -E ./install-full.sh"
+            print_error "curl -O https://raw.githubusercontent.com/triglavfree/deploy/main/scripts/vps/install-full.sh && chmod +x install-full.sh && sudo -E ./install-full.sh"
             exit 1
         fi
     fi
@@ -638,7 +633,7 @@ systemctl --user enable --now code-server >/dev/null 2>&1
 # Проверка статуса
 if systemctl --user is-active --quiet code-server; then
     print_success "VS Code Server установлен и запущен"
-    print_info "Доступ: http://vscode.$BASE_DOMAIN"
+    print_info "Доступ: https://vscode.$BASE_DOMAIN"
     print_info "Пароль сохранён в: /root/.vscode_password"
 else
     print_error "Не удалось запустить VS Code Server"
@@ -647,7 +642,15 @@ fi
 
 # =============== УСТАНОВКА 3X-UI ===============
 print_step "Установка 3x-ui"
+
+# Останавливаем Nginx, чтобы освободить порт 80 для ACME challenge
+systemctl stop nginx >/dev/null 2>&1 || true
+
+# Устанавливаем 3x-ui
 bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh)
+
+# Запускаем Nginx обратно после завершения установки 3x-ui
+systemctl start nginx >/dev/null 2>&1 || true
 
 # =============== НАСТРОЙКА Nginx РЕВЕРС ПРОКСИ ===============
 print_step "Настройка Nginx реверс прокси"
@@ -655,12 +658,15 @@ print_step "Настройка Nginx реверс прокси"
 NGINX_SITES_AVAILABLE="/etc/nginx/sites-available"
 NGINX_N8N_CONF="$NGINX_SITES_AVAILABLE/n8n.conf"
 NGINX_CODE_CONF="$NGINX_SITES_AVAILABLE/code-server.conf"
+NGINX_XUI_CONF="$NGINX_SITES_AVAILABLE/3x-ui.conf"
+XUI_PORT=54321  # Порт по умолчанию для 3x-ui
 
 # n8n
 if [ ! -f "$NGINX_N8N_CONF" ]; then
     cat > "$NGINX_N8N_CONF" <<EOF
 server {
     listen 80;
+    listen [::]:80;
     server_name n8n.$BASE_DOMAIN;
 
     location / {
@@ -673,6 +679,7 @@ server {
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
         proxy_read_timeout 86400s;
+        proxy_set_header X-Forwarded-Host \$http_host;
     }
 }
 EOF
@@ -683,6 +690,7 @@ if [ ! -f "$NGINX_CODE_CONF" ]; then
     cat > "$NGINX_CODE_CONF" <<EOF
 server {
     listen 80;
+    listen [::]:80;
     server_name vscode.$BASE_DOMAIN;
 
     location / {
@@ -695,13 +703,35 @@ server {
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
         proxy_read_timeout 86400s;
+        proxy_set_header X-Forwarded-Host \$http_host;
+    }
+}
+EOF
+fi
+
+# 3x-ui
+if [ ! -f "$NGINX_XUI_CONF" ]; then
+    cat > "$NGINX_XUI_CONF" <<EOF
+server {
+    listen 80;
+    listen [::]:80;
+    server_name xui.$BASE_DOMAIN;
+
+    location / {
+        proxy_pass http://localhost:$XUI_PORT;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 86400s;
+        proxy_set_header X-Forwarded-Host \$http_host;
     }
 }
 EOF
 fi
 
 # Активация конфигураций
-for site in n8n code-server; do
+for site in n8n code-server 3x-ui; do
     if [ ! -L "/etc/nginx/sites-enabled/$site.conf" ]; then
         ln -sf "$NGINX_SITES_AVAILABLE/$site.conf" /etc/nginx/sites-enabled/
     fi
@@ -759,6 +789,13 @@ for service in "${SERVICES[@]}"; do
     fi
 done
 
+# Проверка VS Code Server (пользовательский сервис)
+if systemctl --user is-active --quiet code-server; then
+    print_success "Сервис code-server активен"
+else
+    print_warning "Сервис code-server неактивен"
+fi
+
 # =============== ФИНАЛЬНАЯ СВОДКА ===============
 print_step "ФИНАЛЬНАЯ СВОДКА УСТАНОВКИ"
 
@@ -771,9 +808,9 @@ print_info "  • Swap: $(free -h | grep Swap | awk '{print $2}')"
 print_success "Установленные сервисы:"
 print_info "  • Node.js: $(node -v)"
 print_info "  • n8n: $(n8n --version) (порт 5678)"
-print_info "    → Доступ: http://n8n.$BASE_DOMAIN"
-print_info "  • VS Code Server: http://vscode.$BASE_DOMAIN (пароль в /root/.vscode_password)"
-print_info "  • 3x-ui: установлен (настройте через установочный скрипт)"
+print_info "    → Доступ: https://n8n.$BASE_DOMAIN"
+print_info "  • VS Code Server: https://vscode.$BASE_DOMAIN (пароль в /root/.vscode_password)"
+print_info "  • 3x-ui: https://xui.$BASE_DOMAIN (порт $XUI_PORT)"
 print_info "  • Qwen-code: настроен с MCP сервером Context7"
 print_info "  • Python uv: готов к использованию"
 
@@ -781,14 +818,17 @@ print_success "Безопасность:"
 print_info "  • UFW: активен, SSH только с $CURRENT_IP"
 print_info "  • fail2ban: защищает SSH"
 print_info "  • SSH: пароли отключены"
-print_info "  • Открыты порты: 22 (SSH), 80 (HTTP), 443 (HTTPS), 5678 (n8n), 8443 (VS Code)"
+print_info "  • Открыты порты: 22 (SSH), 80 (HTTP), 443 (HTTPS), 5678 (n8n), 8443 (VS Code), $XUI_PORT (3x-ui)"
 
 print_success "Доменные имена:"
 print_info "  • Настройте A-записи на https://freedns.afraid.org/"
 print_info "  • Создайте записи для:"
 print_info "    → n8n.$BASE_DOMAIN → $EXTERNAL_IP"
 print_info "    → vscode.$BASE_DOMAIN → $EXTERNAL_IP"
-print_info "  • Для 3x-ui настройте домен через его установочный скрипт"
+print_info "    → xui.$BASE_DOMAIN → $EXTERNAL_IP"
+print_info ""
+print_info "После настройки DNS выполните:"
+print_info "certbot --nginx --non-interactive --agree-tos --email admin@$BASE_DOMAIN -d n8n.$BASE_DOMAIN -d vscode.$BASE_DOMAIN -d xui.$BASE_DOMAIN"
 
 print_info "Лог установки: $LOG_FILE"
 print_info "Резервные копии: $BACKUP_DIR"
