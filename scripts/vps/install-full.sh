@@ -531,19 +531,22 @@ fi
 # =============== УСТАНОВКА VS CODE SERVER ===============
 print_step "Установка VS Code Server"
 if ! command -v code-server >/dev/null 2>&1; then
-    print_info "→ Используем официальный установочный скрипт code-server..."
-    curl -fsSL https://code-server.dev/install.sh | sh
+    print_info "→ Установка code-server (вывод скрыт)..."
+    # Устанавливаем без видимого вывода, но сохраняем ошибки
+    if ! curl -fsSL https://code-server.dev/install.sh | sh >/dev/null 2>&1; then
+        print_error "Не удалось установить code-server"
+        exit 1
+    fi
 else
-    print_info "→ code-server уже установлен — пропускаем установку"
+    print_info "→ code-server уже установлен — пропускаем"
 fi
 
-# Настройка автозапуска от root через пользовательский сервис
+# Настройка автозапуска (все команды без вывода)
 SYSTEMD_USER_DIR="/root/.config/systemd/user"
-mkdir -p "$SYSTEMD_USER_DIR"
+mkdir -p "$SYSTEMD_USER_DIR" >/dev/null 2>&1
 
-# Создаём юнит-файл, если его нет
-if [ ! -f "$SYSTEMD_USER_DIR/code-server.service" ]; then
-    cat > "$SYSTEMD_USER_DIR/code-server.service" <<EOF
+# Создаём юнит-файл
+cat > "$SYSTEMD_USER_DIR/code-server.service" <<EOF >/dev/null 2>&1
 [Unit]
 Description=code-server
 After=network.target
@@ -558,9 +561,8 @@ Environment=PASSWORD=$VSCODE_PASSWORD
 [Install]
 WantedBy=default.target
 EOF
-fi
 
-# Генерация пароля (если ещё не создан)
+# Генерация пароля
 VSCODE_PASSWORD_FILE="/root/.vscode_password"
 if [ ! -f "$VSCODE_PASSWORD_FILE" ]; then
     VSCODE_PASSWORD=$(gen_random_string 12)
@@ -569,31 +571,28 @@ if [ ! -f "$VSCODE_PASSWORD_FILE" ]; then
 fi
 VSCODE_PASSWORD=$(cat "$VSCODE_PASSWORD_FILE")
 
-# Настраиваем config.yaml
+# Настройка config.yaml
 CONFIG_DIR="/root/.config/code-server"
-mkdir -p "$CONFIG_DIR"
-cat > "$CONFIG_DIR/config.yaml" <<EOF
+mkdir -p "$CONFIG_DIR" >/dev/null 2>&1
+cat > "$CONFIG_DIR/config.yaml" <<EOF >/dev/null 2>&1
 bind-addr: 0.0.0.0:8443
 auth: password
 password: $VSCODE_PASSWORD
 cert: false
 EOF
 
-# Включаем linger для root — чтобы пользовательские сервисы работали даже без входа в систему
-loginctl enable-linger root
+# Включаем linger и запускаем сервис (без вывода)
+loginctl enable-linger root >/dev/null 2>&1
+systemctl --user daemon-reload >/dev/null 2>&1
+systemctl --user enable --now code-server >/dev/null 2>&1
 
-# Перезагружаем systemd и запускаем сервис
-systemctl --user daemon-reload
-systemctl --user enable --now code-server
-
-# Проверяем статус
+# Проверка статуса (остаётся видимой)
 if systemctl --user is-active --quiet code-server; then
     print_success "VS Code Server установлен и запущен"
     print_info "Доступ: http://$EXTERNAL_IP:8443"
     print_info "Пароль сохранён в: /root/.vscode_password"
 else
     print_error "Не удалось запустить VS Code Server"
-    systemctl --user status code-server --no-pager
     exit 1
 fi
 
