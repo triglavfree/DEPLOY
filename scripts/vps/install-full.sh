@@ -799,5 +799,4 @@ print_info "   grep -A3 -B1 CONTEXT7_API_KEY ~/.qwen/settings.json"
 # Очистка старых резервных копий
 find /root -maxdepth 1 -name "backup_20*" -type d | sort -r | tail -n +2 | xargs rm -rf 2>/dev/null || true
 print_info "Старые резервные копии удалены."
-
 print_info "Скрипт завершён. Всё готово!"
