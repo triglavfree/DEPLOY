@@ -303,12 +303,19 @@ print_info "  • vscode.$BASE_DOMAIN"
 print_info "  • xui.$BASE_DOMAIN"
 
 # =============== РЕЗЕРВНЫЕ КОПИИ ===============
-print_step "Создание резервных копий"
-mkdir -p "$BACKUP_DIR"
-cp /etc/ssh/sshd_config "$BACKUP_DIR/" 2>/dev/null || true
-cp /etc/sysctl.conf "$BACKUP_DIR/" 2>/dev/null || true
-cp /etc/fstab "$BACKUP_DIR/" 2>/dev/null || true
-print_success "Резервные копии созданы в: $BACKUP_DIR"
+print_step "Создание резервных копий (если ещё не созданы)"
+BACKUP_MARKER="/root/.backup_created"
+if [ ! -f "$BACKUP_MARKER" ]; then
+    BACKUP_DIR="/root/backup_$(date +%Y%m%d_%H%M%S)"
+    mkdir -p "$BACKUP_DIR"
+    cp /etc/ssh/sshd_config "$BACKUP_DIR/" 2>/dev/null || true
+    cp /etc/sysctl.conf "$BACKUP_DIR/" 2>/dev/null || true
+    cp /etc/fstab "$BACKUP_DIR/" 2>/dev/null || true
+    print_success "Резервные копии: $BACKUP_DIR"
+    touch "$BACKUP_MARKER"
+else
+    print_info "Резервные копии уже созданы — пропускаем"
+fi
 
 # =============== ПРОВЕРКА SSH ===============
 check_ssh_access_safety
