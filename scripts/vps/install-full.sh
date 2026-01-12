@@ -406,10 +406,10 @@ else
 fi
 
 # Открываем порты для сервисов
-ufw allow 80
-ufw allow 443
-ufw allow 5678
-ufw allow 8443
+ufw allow 80 >/dev/null 2>&1
+ufw allow 443 >/dev/null 2>&1
+ufw allow 5678 >/dev/null 2>&1
+ufw allow 8443 >/dev/null 2>&1
 
 ufw --force enable >/dev/null 2>&1
 print_success "UFW активирован"
