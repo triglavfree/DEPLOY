@@ -530,27 +530,6 @@ else
     print_info "uv уже установлен — пропускаем"
 fi
 
-# =============== НАСТРОЙКА БЕЗОПАСНОСТИ ===============
-print_step "Настройка безопасности"
-
-# UFW — брандмауэр
-ufw --force reset >/dev/null 2>&1 || true
-ufw default deny incoming >/dev/null 2>&1
-ufw default allow outgoing >/dev/null 2>&1
-
-# Открываем порты ДО установки 3x-ui и выпуска сертификатов!
-# Порт 80 — обязателен для HTTP-валидации Let's Encrypt
-# Порт 443 — для HTTPS-трафика Xray
-if [ -n "$CURRENT_IP" ]; then
-    ufw allow from "$CURRENT_IP" to any port 22 comment "SSH с доверенного IP" >/dev/null 2>&1
-else
-    ufw allow 22 comment "SSH" >/dev/null 2>&1
-fi
-ufw allow 80 comment "HTTP (Let's Encrypt + 3x-ui)" >/dev/null 2>&1
-ufw allow 443 comment "HTTPS (Xray + 3x-ui)" >/dev/null 2>&1
-ufw --force enable >/dev/null 2>&1
-print_success "UFW настроен"
-
 # =============== УСТАНОВКА VS CODE SERVER ===============
 print_step "Установка VS Code Server"
 if ! command -v code-server >/dev/null 2>&1; then
