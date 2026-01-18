@@ -257,23 +257,23 @@ else
 fi
 
 # =============== UFW: SSH ТОЛЬКО С ВАШЕГО IP ===============
-print_step "Настройка брандмауэра UFW"
-ufw --force reset >/dev/null 2>&1 || true
-ufw default deny incoming >/dev/null 2>&1
-ufw default allow outgoing >/dev/null 2>&1
+# print_step "Настройка брандмауэра UFW"
+# ufw --force reset >/dev/null 2>&1 || true
+# ufw default deny incoming >/dev/null 2>&1
+# ufw default allow outgoing >/dev/null 2>&1
 
-if [ -n "$CURRENT_IP" ]; then
-    ufw allow from "$CURRENT_IP" to any port ssh comment "SSH с доверенного IP" >/dev/null 2>&1
-    print_success "Правила UFW применены: SSH разрешён только с $CURRENT_IP"
-else
-    ufw allow ssh comment "SSH (глобально)" >/dev/null 2>&1
-    print_warning "SSH разрешён для всех (IP не определён)"
-fi
+# if [ -n "$CURRENT_IP" ]; then
+#     ufw allow from "$CURRENT_IP" to any port ssh comment "SSH с доверенного IP" >/dev/null 2>&1
+#     print_success "Правила UFW применены: SSH разрешён только с $CURRENT_IP"
+# else
+#     ufw allow ssh comment "SSH (глобально)" >/dev/null 2>&1
+#     print_warning "SSH разрешён для всех (IP не определён)"
+# fi
 
-ufw --force enable >/dev/null 2>&1
-if ! ufw status | grep -qi "Status: active"; then
-    print_error "UFW не активирован"
-fi
+# ufw --force enable >/dev/null 2>&1
+# if ! ufw status | grep -qi "Status: active"; then
+#     print_error "UFW не активирован"
+# fi
 
 # =============== ОПТИМИЗАЦИЯ ЯДРА (МАКСИМАЛЬНАЯ ПРОИЗВОДИТЕЛЬНОСТЬ) ===============
 print_step "Оптимизация ядра для МАКСИМАЛЬНОЙ производительности"
