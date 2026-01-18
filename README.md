@@ -64,6 +64,11 @@ nano ~/.qwen/settings.json
 npx n8n
 ```
 ---
+### 3X-UI
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh)
+```
+---
 ### Hiddify-Manager
 ```bash
 bash <(curl https://i.hiddify.com/release)
