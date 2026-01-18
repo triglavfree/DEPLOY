@@ -84,11 +84,6 @@ curl -fsSL https://raw.githubusercontent.com/triglavfree/deploy/main/scripts/wir
 bash <(curl https://raw.githubusercontent.com/ReturnFI/Blitz/main/install.sh)
 ```
 ---
-### 3X-UI
-```bash
-bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh)
-```
----
 ### eGamesAPI Remnawave Revers-Proxy
 ```bash
 bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh)
