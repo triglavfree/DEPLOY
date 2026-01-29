@@ -9,6 +9,7 @@ WorkingDirectory=/home/%i
 Environment=HOME=/home/%i
 ExecStart=/usr/local/bin/code-server
 Restart=always
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
