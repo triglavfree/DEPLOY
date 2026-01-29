@@ -7,7 +7,6 @@
     dev_user: "dev"
     forgejo_version: "14.0.1"
     torrserver_version: "MatriX.137"
-    code_server_version: "4.97.3"  # ← Актуальная стабильная версия
     arch: "amd64"
 
   tasks:
@@ -183,7 +182,8 @@
         state: started
         daemon_reload: yes
 
-    - name: Установить code-server (версия 4.97.3)
+    # --- 5. code-server (версия 4.97.3 — проверенная и существующая) ---
+    - name: Установить code-server 4.97.3
       shell: |
         curl -fsSL https://code-server.dev/install.sh | sh -s -- --method=standalone --prefix=/usr/local --version 4.97.3
       args:
@@ -201,7 +201,7 @@
         group: "{{ dev_user }}"
         mode: '0700'
 
-    - name: Создать конфиг code-server
+    - name: Создать конфиг code-server (без телеметрии, данные в домашней папке)
       copy:
         content: |
           bind-addr: 0.0.0.0:8080
@@ -209,6 +209,7 @@
           password: "{{ lookup('password', '/dev/null length=24 chars=ascii_letters,digits') }}"
           cert: false
           disable-telemetry: true
+          disable-update-check: true
           user-data-dir: /home/{{ dev_user }}/.local/share/code-server
         dest: "/home/{{ dev_user }}/.config/code-server/config.yaml"
         owner: "{{ dev_user }}"
