@@ -182,16 +182,31 @@
         state: started
         daemon_reload: yes
 
-    - name: Установить code-server (последняя версия)
-      shell: |
-        curl -fsSL https://code-server.dev/install.sh | sh -s -- --method=standalone --prefix=/usr/local
-      args:
-        creates: /usr/local/bin/code-server
-      register: cs_install
-      until: cs_install is succeeded
+    # --- 5. code-server (установка напрямую из tar.gz) ---
+    - name: Скачать code-server 4.108.2 (tar.gz)
+      get_url:
+        url: "https://github.com/coder/code-server/releases/download/v4.108.2/code-server-4.108.2-linux-amd64.tar.gz"
+        dest: "/tmp/code-server.tar.gz"
+        mode: '0644'
+      register: cs_download
+      until: cs_download is succeeded
       retries: 3
       delay: 5
-
+    
+    - name: Распаковать code-server в /usr/local/bin/
+      unarchive:
+        src: "/tmp/code-server.tar.gz"
+        dest: "/usr/local/bin/"
+        remote_src: yes
+        creates: "/usr/local/bin/code-server"
+    
+    - name: Создать символическую ссылку (если нужно)
+      file:
+        src: "/usr/local/bin/code-server-4.108.2-linux-amd64/code-server"
+        dest: "/usr/local/bin/code-server"
+        state: link
+        force: yes
+    
     - name: Создать директорию конфига code-server
       file:
         path: "/home/{{ dev_user }}/.config/code-server"
@@ -199,8 +214,8 @@
         owner: "{{ dev_user }}"
         group: "{{ dev_user }}"
         mode: '0700'
-
-    - name: Создать конфиг code-server (без телеметрии, данные в домашней папке)
+    
+    - name: Создать конфиг code-server (без телеметрии)
       copy:
         content: |
           bind-addr: 0.0.0.0:8080
@@ -214,13 +229,13 @@
         owner: "{{ dev_user }}"
         group: "{{ dev_user }}"
         mode: '0600'
-
+    
     - name: Systemd-юнит code-server
       template:
         src: templates/code-server.service.j2
         dest: "/etc/systemd/system/code-server@{{ dev_user }}.service"
         mode: '0644'
-
+    
     - name: Запустить code-server
       systemd:
         name: "code-server@{{ dev_user }}"
