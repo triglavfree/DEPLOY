@@ -16,8 +16,8 @@ curl -fsSL https://raw.githubusercontent.com/triglavfree/deploy/main/scripts/cod
 ```
 
 # Итог
-✅ Идемпотентность — можно запускать сколько угодно раз
-✅ Настоящий VSCodium в браузере (без телеметрии Microsoft)
-✅ Forgejo с SQLite
-✅ TorrServer для стриминга торрентов
-✅ Полная безопасность и оптимизация
+- Идемпотентность — можно запускать сколько угодно раз
+- Настоящий VSCodium в браузере (без телеметрии Microsoft)
+- Forgejo с SQLite
+- TorrServer для стриминга торрентов
+- Полная безопасность и оптимизация
