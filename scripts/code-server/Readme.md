@@ -20,5 +20,5 @@ curl -fsSL https://raw.githubusercontent.com/triglavfree/deploy/main/scripts/cod
 - Нет проприетарных компонентов ✅ Все бинарники — из открытых релизов на GitHub
 - Forgejo с SQLite
 - TorrServer для стриминга торрентов
-- Полная безопасность и оптимизация (`ufw`, `fail2ban`)
-- Нет телеметрии в Microsoft ✅ disable-telemetry: true + Open VSX вместо Marketplace
+- Полная безопасность и оптимизация ✅ `ufw`, `fail2ban` ✅ Используем глобальный `uv` из `/home/user/.local/bin/uv`
+- Нет телеметрии в Microsoft ✅ disable-telemetry: true + Open VSX вместо Marketplace ✅ Никаких фоновых соединений с внешними серверами
