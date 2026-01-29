@@ -10,16 +10,39 @@
     arch: "amd64"
 
   tasks:
-    # --- 0. Остановка служб для идемпотентности ---
-    - name: Остановить службы перед переустановкой
-      systemd:
-        name: "{{ item }}"
-        state: stopped
-      loop:
-        - "code-server@{{ dev_user }}"
-        - forgejo
-        - torrserver
+    # --- 0. Остановка служб (только если они существуют) ---
+    - name: Проверить наличие службы code-server@dev
+      command: systemctl is-active --quiet code-server@{{ dev_user }}
       ignore_errors: yes
+      register: cs_service
+    
+    - name: Остановить code-server@dev (если активна)
+      systemd:
+        name: "code-server@{{ dev_user }}"
+        state: stopped
+      when: cs_service is succeeded
+    
+    - name: Проверить наличие службы forgejo
+      command: systemctl is-active --quiet forgejo
+      ignore_errors: yes
+      register: forgejo_service
+    
+    - name: Остановить forgejo (если активна)
+      systemd:
+        name: forgejo
+        state: stopped
+      when: forgejo_service is succeeded
+    
+    - name: Проверить наличие службы torrserver
+      command: systemctl is-active --quiet torrserver
+      ignore_errors: yes
+      register: torrserver_service
+    
+    - name: Остановить torrserver (если активна)
+      systemd:
+        name: torrserver
+        state: stopped
+      when: torrserver_service is succeeded
 
     # --- 1. Пользователи ---
     - name: Создать пользователя dev
