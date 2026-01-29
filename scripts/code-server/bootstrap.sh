@@ -3,8 +3,8 @@ set -e
 export DEBIAN_FRONTEND=noninteractive
 
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║  Self-Hosted Dev Platform — Ubuntu 24.04 Server             ║"
-echo "║  VSCodium (браузер) + Forgejo + TorrServer                  ║"
+echo "║  Self-Hosted Dev Platform — Ubuntu 24.04 Server              ║"
+echo "║  VSCodium (браузер) + Forgejo + TorrServer                   ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 
 # === Проверка прав ===
