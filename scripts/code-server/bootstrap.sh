@@ -4,7 +4,7 @@ export DEBIAN_FRONTEND=noninteractive
 
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║  Self-Hosted Dev Platform — Ubuntu 24.04 Server             ║"
-echo "║  Forgejo + code-server + TorrServer (LAN only)              ║"
+echo "║  VSCodium (браузер) + Forgejo + TorrServer                  ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 
 # === Проверка прав ===
@@ -22,7 +22,7 @@ run_as_user() {
 }
 
 # === 1. Обновление системы (включая phased updates) ===
-echo "🔄 Обновление системы (с phased updates)..."
+echo "🔄 Обновление системы..."
 apt -o APT::Get::Always-Include-Phased-Updates=true update -qq
 apt -o APT::Get::Always-Include-Phased-Updates=true upgrade -qq -y
 
@@ -48,7 +48,7 @@ if [ ! -f /swapfile ]; then
   echo '/swapfile none swap sw 0 0' >> /etc/fstab
 fi
 
-# === 3. Установка пакетов (идемпотентно) ===
+# === 3. Установка пакетов ===
 echo "📦 Установка зависимостей..."
 apt install -qq -y \
   curl wget git python3-pip python3-venv pipx \
@@ -59,7 +59,7 @@ apt install -qq -y \
 echo "🐍 Установка uv через pipx..."
 
 # Убедимся, что PATH включает ~/.local/bin
-run_as_user sh -c 'echo ''export PATH="$HOME/.local/bin:$PATH"'' >> ~/.profile 2>/dev/null || true'
+run_as_user sh -c 'grep -q "export PATH=.*.local/bin" ~/.profile 2>/dev/null || echo "export PATH=\"\$HOME/.local/bin:\$PATH\"" >> ~/.profile' || true
 
 # Устанавливаем uv, если ещё не установлен
 if ! run_as_user command -v uv &> /dev/null; then
@@ -75,16 +75,15 @@ export PATH="/home/$TARGET_USER/.local/bin:$PATH"
 ANSIBLE_VENV="/opt/ansible"
 if [ ! -d "$ANSIBLE_VENV" ]; then
   echo "⚙️  Создание изолированного окружения для Ansible..."
-  # Используем ГЛОБАЛЬНЫЙ uv (установленный через pipx)
-  /home/"$TARGET_USER"/.local/bin/uv venv "$ANSIBLE_VENV" --python 3.12
+  uv venv "$ANSIBLE_VENV" --python 3.12
 fi
 
-# Устанавливаем Ansible через ГЛОБАЛЬНЫЙ uv
+# Устанавливаем Ansible, если не установлен
 if ! "$ANSIBLE_VENV/bin/ansible" --version &> /dev/null; then
-  /home/"$TARGET_USER"/.local/bin/uv pip install --quiet "ansible-core>=2.16" -p "$ANSIBLE_VENV"
+  uv pip install --quiet "ansible-core>=2.16" -p "$ANSIBLE_VENV"
 fi
 
-# === 6. Скачивание конфигурации (если ещё не скачана) ===
+# === 6. Скачивание конфигурации ===
 DEPLOY_DIR="/opt/deploy-code-server"
 if [ ! -f "$DEPLOY_DIR/setup.yml" ]; then
   echo "📥 Скачивание плейбука и шаблонов..."
@@ -95,7 +94,7 @@ if [ ! -f "$DEPLOY_DIR/setup.yml" ]; then
     -o "$DEPLOY_DIR/templates/code-server.service.j2"
 fi
 
-# === 7. Запуск Ansible (идемпотентен по умолчанию) ===
+# === 7. Запуск Ansible ===
 echo "🚀 Запуск развёртывания через Ansible..."
 "$ANSIBLE_VENV/bin/ansible-playbook" \
   --connection=local \
@@ -103,11 +102,11 @@ echo "🚀 Запуск развёртывания через Ansible..."
   "$DEPLOY_DIR/setup.yml"
 
 # === 8. Определение IP ===
-LOCAL_IP=$(ip -4 addr show scope global | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -n1)
+LOCAL_IP=$(ip -4 addr show scope global 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -n1)
 [ -z "$LOCAL_IP" ] && LOCAL_IP="IP_НЕ_ОПРЕДЕЛЁН"
 
 # === 9. Финальная инструкция ===
-PASSWORD=$(grep -m1 password /home/dev/.config/code-server/config.yaml 2>/dev/null | cut -d' ' -f3 || echo "пароль в файле")
+PASSWORD=$(grep -m1 password /home/dev/.config/code-server/config.yaml 2>/dev/null | cut -d' ' -f3 || echo "см. файл")
 
 echo ""
 echo "╔══════════════════════════════════════════════════════════════╗"
@@ -115,9 +114,10 @@ echo "║  ✅ УСТАНОВКА ЗАВЕРШЕНА                            
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 echo "🌐 Сервисы доступны из локальной сети (192.168.0.0/16):"
-echo "  • code-server: http://$LOCAL_IP:8080 (пароль: $PASSWORD)"
-echo "  • Forgejo:     http://$LOCAL_IP:3000"
-echo "  • TorrServer:  http://$LOCAL_IP:8081"
+echo "  • VSCodium (браузер):  http://$LOCAL_IP:8080"
+echo "    Пароль: $PASSWORD"
+echo "  • Forgejo (Git):       http://$LOCAL_IP:3000"
+echo "  • TorrServer (торрент): http://$LOCAL_IP:8081"
 echo ""
 echo "🔒 Безопасность: SSH по ключу, UFW, Fail2ban — всё активно."
 echo "💡 Совет: откройте http://$LOCAL_IP:8080 на любом устройстве в сети!"
