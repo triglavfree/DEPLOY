@@ -10,23 +10,15 @@
     arch: "amd64"
 
   tasks:
-    # --- 0. Проверка и остановка запущенных служб (для идемпотентности) ---
-    - name: Проверить статус службы code-server
+    # --- 0. Остановка служб для идемпотентности ---
+    - name: Остановить службы перед переустановкой
       systemd:
-        name: "code-server@{{ dev_user }}"
+        name: "{{ item }}"
         state: stopped
-      ignore_errors: yes
-
-    - name: Проверить статус службы forgejo
-      systemd:
-        name: forgejo
-        state: stopped
-      ignore_errors: yes
-
-    - name: Проверить статус службы torrserver
-      systemd:
-        name: torrserver
-        state: stopped
+      loop:
+        - "code-server@{{ dev_user }}"
+        - forgejo
+        - torrserver
       ignore_errors: yes
 
     # --- 1. Пользователи ---
@@ -38,13 +30,14 @@
         groups: sudo
         append: yes
 
-    - name: Создать пользователя forgejo
+    - name: Создать пользователя git (для Forgejo)
       user:
-        name: forgejo
+        name: git
         system: yes
-        shell: /usr/sbin/nologin
+        shell: /bin/bash
         home: /var/lib/forgejo
         create_home: yes
+        comment: "Git Version Control"
 
     - name: Создать пользователя torrserver
       user:
@@ -99,7 +92,7 @@
           Type=simple
           User=torrserver
           WorkingDirectory=/var/lib/torrserver
-          ExecStart=/usr/local/bin/torrserver -dir /var/lib/torrserver/db -port 8081
+          ExecStart=/usr/local/bin/torrserver -d /var/lib/torrserver/db -p 8081
           Restart=always
           RestartSec=5
 
@@ -108,12 +101,12 @@
         dest: /etc/systemd/system/torrserver.service
         mode: '0644'
 
-     - name: Запустить TorrServer
-       systemd:
-         name: torrserver
-         enabled: yes
-         state: started
-       notify: reload_systemd_daemon
+    - name: Запустить TorrServer
+      systemd:
+        name: torrserver
+        enabled: yes
+        state: started
+        daemon_reload: yes
 
     # --- 4. Forgejo ---
     - name: Скачать Forgejo
@@ -140,13 +133,14 @@
       file:
         path: "{{ item }}"
         state: directory
-        owner: forgejo
-        group: forgejo
+        owner: git
+        group: git
         mode: '0750'
       loop:
         - /etc/forgejo
         - /var/lib/forgejo
         - /var/lib/forgejo/repositories
+        - /var/lib/forgejo/log
 
     - name: Конфиг Forgejo (SQLite, LAN)
       copy:
@@ -170,9 +164,14 @@
 
           [service]
           DISABLE_REGISTRATION = false
+
+          [log]
+          MODE = file
+          LEVEL = Info
+          ROOT_PATH = /var/lib/forgejo/log
         dest: /etc/forgejo/app.ini
-        owner: forgejo
-        group: forgejo
+        owner: git
+        group: git
         mode: '0640'
 
     - name: Systemd-юнит Forgejo
@@ -184,68 +183,67 @@
 
           [Service]
           Type=simple
-          User=forgejo
-          Group=forgejo
+          User=git
+          Group=git
           WorkingDirectory=/var/lib/forgejo
-          ExecStart=/usr/local/bin/forgejo web --config /etc/forgejo/app.ini
+          ExecStart=/usr/local/bin/forgejo web --config /etc/forgejo/app.ini --work-path /var/lib/forgejo
           Restart=always
           RestartSec=5
-          Environment=USER=forgejo HOME=/var/lib/forgejo
+          Environment=USER=git HOME=/var/lib/forgejo
 
           [Install]
           WantedBy=multi-user.target
         dest: /etc/systemd/system/forgejo.service
         mode: '0644'
 
-     - name: Запустить Forgejo
-       systemd:
-         name: forgejo
-         enabled: yes
-         state: started
-       notify: reload_systemd_daemon
+    - name: Запустить Forgejo
+      systemd:
+        name: forgejo
+        enabled: yes
+        state: started
+        daemon_reload: yes
 
-     # --- 5. code-server (установка последней совместимой версии) ---
-     - name: Установить code-server через официальный скрипт
-       shell: |
-         curl -fsSL https://code-server.dev/install.sh | sh -s -- --method=standalone --prefix=/usr/local
-       args:
-         creates: /usr/local/bin/code-server
-       register: cs_install
-       until: cs_install is succeeded
-       retries: 3
-       delay: 5
+    # --- 5. code-server ---
+    - name: Установить code-server (последняя версия)
+      shell: |
+        curl -fsSL https://code-server.dev/install.sh | sh -s -- --method=standalone --prefix=/usr/local
+      args:
+        creates: /usr/local/bin/code-server
+      register: cs_install
+      until: cs_install is succeeded
+      retries: 3
+      delay: 5
 
-     - name: Создать директорию конфига code-server
-       file:
-         path: "/home/{{ dev_user }}/.config/code-server"
-         state: directory
-         owner: "{{ dev_user }}"
-         group: "{{ dev_user }}"
-         mode: '0700'
+    - name: Создать директорию конфига code-server
+      file:
+        path: "/home/{{ dev_user }}/.config/code-server"
+        state: directory
+        owner: "{{ dev_user }}"
+        group: "{{ dev_user }}"
+        mode: '0700'
 
-     - name: Создать директорию данных code-server
-       file:
-         path: "/home/{{ dev_user }}/.local/share/code-server"
-         state: directory
-         owner: "{{ dev_user }}"
-         group: "{{ dev_user }}"
-         mode: '0700'
+    - name: Создать директорию данных code-server
+      file:
+        path: "/home/{{ dev_user }}/.local/share/code-server"
+        state: directory
+        owner: "{{ dev_user }}"
+        group: "{{ dev_user }}"
+        mode: '0700'
 
-     - name: Создать конфиг code-server (без телеметрии и с фиксированным путем данных)
-       copy:
-         content: |
-           bind-addr: 0.0.0.0:8080
-           auth: password
-           password: "{{ lookup('password', '/dev/null length=24 chars=ascii_letters,digits') }}"
-           cert: false
-           disable-telemetry: true
-           disable-update-check: true
-           user-data-dir: /home/{{ dev_user }}/.local/share/code-server
-           data-dir: /home/{{ dev_user }}/.local/share/code-server
-         dest: "/home/{{ dev_user }}/.config/code-server/config.yaml"
-         owner: "{{ dev_user }}"
-         group: "{{ dev_user }}"
-         mode: '0600'
+    - name: Создать конфиг code-server (без телеметрии)
+      copy:
+        content: |
+          bind-addr: 0.0.0.0:8080
+          auth: password
+          password: "{{ lookup('password', '/dev/null length=24 chars=ascii_letters,digits') }}"
+          cert: false
+          disable-telemetry: true
+          disable-update-check: true
+          user-data-dir: /home/{{ dev_user }}/.local/share/code-server
+        dest: "/home/{{ dev_user }}/.config/code-server/config.yaml"
+        owner: "{{ dev_user }}"
+        group: "{{ dev_user }}"
+        mode: '0600'
 
     - name: Systemd-юнит code-server
       template:
@@ -253,12 +251,12 @@
         dest: "/etc/systemd/system/code-server@{{ dev_user }}.service"
         mode: '0644'
 
-     - name: Запустить code-server
-       systemd:
-         name: "code-server@{{ dev_user }}"
-         enabled: yes
-         state: started
-       notify: reload_systemd_daemon
+    - name: Запустить code-server
+      systemd:
+        name: "code-server@{{ dev_user }}"
+        enabled: yes
+        state: started
+        daemon_reload: yes
 
     # --- 6. UFW (только локальная сеть) ---
     - name: Настроить UFW для локальной сети
@@ -271,12 +269,8 @@
         ufw allow proto tcp from any to any port 22 comment 'SSH'
         ufw --force enable
 
-   handlers:
-     - name: restart_ssh
-       systemd:
-         name: ssh
-         state: restarted
-
-     - name: reload_systemd_daemon
-       systemd:
-         daemon_reload: yes
+  handlers:
+    - name: restart_ssh
+      systemd:
+        name: ssh
+        state: restarted
