@@ -1,0 +1,282 @@
+---
+- name: Deploy self-hosted dev platform (code-server + Forgejo + TorrServer)
+  hosts: 127.0.0.1
+  connection: local
+  become: true
+  vars:
+    dev_user: "dev"
+    forgejo_version: "14.0.1"
+    torrserver_version: "MatriX.137"
+    arch: "amd64"
+
+  tasks:
+    # --- 0. Проверка и остановка запущенных служб (для идемпотентности) ---
+    - name: Проверить статус службы code-server
+      systemd:
+        name: "code-server@{{ dev_user }}"
+        state: stopped
+      ignore_errors: yes
+
+    - name: Проверить статус службы forgejo
+      systemd:
+        name: forgejo
+        state: stopped
+      ignore_errors: yes
+
+    - name: Проверить статус службы torrserver
+      systemd:
+        name: torrserver
+        state: stopped
+      ignore_errors: yes
+
+    # --- 1. Пользователи ---
+    - name: Создать пользователя dev
+      user:
+        name: "{{ dev_user }}"
+        shell: /bin/bash
+        create_home: yes
+        groups: sudo
+        append: yes
+
+    - name: Создать пользователя forgejo
+      user:
+        name: forgejo
+        system: yes
+        shell: /usr/sbin/nologin
+        home: /var/lib/forgejo
+        create_home: yes
+
+    - name: Создать пользователя torrserver
+      user:
+        name: torrserver
+        system: yes
+        shell: /usr/sbin/nologin
+        home: /var/lib/torrserver
+        create_home: yes
+
+    # --- 2. SSH: только по ключу ---
+    - name: Отключить вход по паролю в SSH
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+        backup: yes
+      loop:
+        - { regexp: '^#?PasswordAuthentication', line: 'PasswordAuthentication no' }
+        - { regexp: '^#?PermitRootLogin', line: 'PermitRootLogin no' }
+      notify: restart_ssh
+
+    # --- 3. TorrServer ---
+    - name: Скачать TorrServer
+      get_url:
+        url: "https://github.com/YouROK/TorrServer/releases/download/{{ torrserver_version }}/TorrServer-linux-amd64"
+        dest: "/usr/local/bin/torrserver"
+        mode: '0755'
+      register: torrserver_download
+      until: torrserver_download is succeeded
+      retries: 3
+      delay: 5
+
+    - name: Создать каталоги TorrServer
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: torrserver
+        group: torrserver
+        mode: '0750'
+      loop:
+        - /var/lib/torrserver/db
+        - /var/lib/torrserver/torrents
+
+    - name: Создать systemd-юнит TorrServer
+      copy:
+        content: |
+          [Unit]
+          Description=TorrServer
+          After=network.target
+
+          [Service]
+          Type=simple
+          User=torrserver
+          WorkingDirectory=/var/lib/torrserver
+          ExecStart=/usr/local/bin/torrserver -dir /var/lib/torrserver/db -port 8081
+          Restart=always
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/torrserver.service
+        mode: '0644'
+
+    - name: Запустить TorrServer
+      systemd:
+        name: torrserver
+        enabled: yes
+        state: started
+      notify: reload_systemd_daemon
+
+    # --- 4. Forgejo ---
+    - name: Скачать Forgejo
+      get_url:
+        url: "https://codeberg.org/forgejo/forgejo/releases/download/v{{ forgejo_version }}/forgejo-{{ forgejo_version }}-linux-{{ arch }}.xz"
+        dest: "/tmp/forgejo.xz"
+        mode: '0644'
+      register: forgejo_download
+      until: forgejo_download is succeeded
+      retries: 3
+      delay: 5
+
+    - name: Распаковать Forgejo
+      shell: xz --decompress --stdout /tmp/forgejo.xz > /usr/local/bin/forgejo
+      args:
+        creates: /usr/local/bin/forgejo
+
+    - name: Сделать исполняемым
+      file:
+        path: /usr/local/bin/forgejo
+        mode: '0755'
+
+    - name: Создать каталоги Forgejo
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: forgejo
+        group: forgejo
+        mode: '0750'
+      loop:
+        - /etc/forgejo
+        - /var/lib/forgejo
+        - /var/lib/forgejo/repositories
+
+    - name: Конфиг Forgejo (SQLite, LAN)
+      copy:
+        content: |
+          [database]
+          DB_TYPE = sqlite3
+          PATH = /var/lib/forgejo/gitea.db
+
+          [repository]
+          ROOT = /var/lib/forgejo/repositories
+
+          [server]
+          HTTP_PORT = 3000
+          DOMAIN = localhost
+          ROOT_URL = http://localhost:3000/
+          HTTP_ADDR = 0.0.0.0
+
+          [security]
+          INSTALL_LOCK = false
+          SECRET_KEY = {{ lookup('password', '/dev/null length=32 chars=ascii_letters,digits') }}
+
+          [service]
+          DISABLE_REGISTRATION = false
+        dest: /etc/forgejo/app.ini
+        owner: forgejo
+        group: forgejo
+        mode: '0640'
+
+    - name: Systemd-юнит Forgejo
+      copy:
+        content: |
+          [Unit]
+          Description=Forgejo
+          After=network.target
+
+          [Service]
+          Type=simple
+          User=forgejo
+          Group=forgejo
+          WorkingDirectory=/var/lib/forgejo
+          ExecStart=/usr/local/bin/forgejo web --config /etc/forgejo/app.ini
+          Restart=always
+          RestartSec=5
+          Environment=USER=forgejo HOME=/var/lib/forgejo
+
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/forgejo.service
+        mode: '0644'
+
+    - name: Запустить Forgejo
+      systemd:
+        name: forgejo
+        enabled: yes
+        state: started
+      notify: reload_systemd_daemon
+
+    # --- 5. code-server (установка последней совместимой версии) ---
+    - name: Установить code-server через официальный скрипт
+      shell: |
+        curl -fsSL https://code-server.dev/install.sh | sh -s -- --method=standalone --prefix=/usr/local
+      args:
+        creates: /usr/local/bin/code-server
+      register: cs_install
+      until: cs_install is succeeded
+      retries: 3
+      delay: 5
+
+    - name: Создать директорию конфига code-server
+      file:
+        path: "/home/{{ dev_user }}/.config/code-server"
+        state: directory
+        owner: "{{ dev_user }}"
+        group: "{{ dev_user }}"
+        mode: '0700'
+
+    - name: Создать директорию данных code-server
+      file:
+        path: "/home/{{ dev_user }}/.local/share/code-server"
+        state: directory
+        owner: "{{ dev_user }}"
+        group: "{{ dev_user }}"
+        mode: '0700'
+
+    - name: Создать конфиг code-server (без телеметрии и с фиксированным путем данных)
+      copy:
+        content: |
+          bind-addr: 0.0.0.0:8080
+          auth: password
+          password: "{{ lookup('password', '/dev/null length=24 chars=ascii_letters,digits') }}"
+          cert: false
+          disable-telemetry: true
+          disable-update-check: true
+          user-data-dir: /home/{{ dev_user }}/.local/share/code-server
+          data-dir: /home/{{ dev_user }}/.local/share/code-server
+        dest: "/home/{{ dev_user }}/.config/code-server/config.yaml"
+        owner: "{{ dev_user }}"
+        group: "{{ dev_user }}"
+        mode: '0600'
+
+    - name: Systemd-юнит code-server
+      template:
+        src: templates/code-server.service.j2
+        dest: "/etc/systemd/system/code-server@{{ dev_user }}.service"
+        mode: '0644'
+
+    - name: Запустить code-server
+      systemd:
+        name: "code-server@{{ dev_user }}"
+        enabled: yes
+        state: started
+      notify: reload_systemd_daemon
+
+    # --- 6. UFW (только локальная сеть) ---
+    - name: Настроить UFW для локальной сети
+      shell: |
+        ufw default deny incoming
+        ufw default allow outgoing
+        ufw allow from 192.168.0.0/16 to any port 8080 comment 'code-server'
+        ufw allow from 192.168.0.0/16 to any port 3000 comment 'Forgejo'
+        ufw allow from 192.168.0.0/16 to any port 8081 comment 'TorrServer'
+        ufw allow proto tcp from any to any port 22 comment 'SSH'
+        ufw --force enable
+
+  handlers:
+    - name: restart_ssh
+      systemd:
+        name: ssh
+        state: restarted
+
+    - name: reload_systemd_daemon
+      systemd:
+        daemon_reload: yes
