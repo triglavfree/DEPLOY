@@ -4,7 +4,7 @@ export DEBIAN_FRONTEND=noninteractive
 
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║  Self-Hosted Dev Platform — Ubuntu 24.04 Server              ║"
-echo "║  VSCodium (браузер) + Forgejo + TorrServer  i                ║"
+echo "║  VSCodium (браузер) + Forgejo + TorrServer                   ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 
 # === Проверка прав ===
@@ -88,9 +88,9 @@ DEPLOY_DIR="/opt/deploy-code-server"
 echo "📥 Подготовка плейбука и шаблонов..."
 mkdir -p "$DEPLOY_DIR/templates"
 
-# Копируем наши исправленные файлы
-cp /root/scrypt/fixed_setup.yml "$DEPLOY_DIR/setup.yml"
-cp /root/scrypt/templates/code-server.service.j2 "$DEPLOY_DIR/templates/code-server.service.j2"
+# Скачиваем исправленные файлы из репозитория
+curl -fsSL https://raw.githubusercontent.com/triglavfree/DEPLOY/main/scripts/code-server/fixed_setup.yml -o "$DEPLOY_DIR/setup.yml"
+curl -fsSL https://raw.githubusercontent.com/triglavfree/DEPLOY/main/scripts/code-server/templates/code-server.service.j2 -o "$DEPLOY_DIR/templates/code-server.service.j2"
 
 # === 7. Запуск Ansible ===
 echo "🚀 Запуск развёртывания через Ansible..."
