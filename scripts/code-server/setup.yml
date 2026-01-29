@@ -183,10 +183,9 @@
         state: started
         daemon_reload: yes
 
-    # --- 5. code-server (полностью открытая версия без телеметрии) ---
-    - name: Установить code-server
+    - name: Установить code-server (версия 4.97.3)
       shell: |
-        curl -fsSL https://code-server.dev/install.sh | sh -s -- --method=standalone --prefix=/usr/local --version {{ code_server_version }}
+        curl -fsSL https://code-server.dev/install.sh | sh -s -- --method=standalone --prefix=/usr/local --version 4.97.3
       args:
         creates: /usr/local/bin/code-server
       register: cs_install
@@ -202,7 +201,7 @@
         group: "{{ dev_user }}"
         mode: '0700'
 
-    - name: Создать конфиг code-server (без телеметрии)
+    - name: Создать конфиг code-server
       copy:
         content: |
           bind-addr: 0.0.0.0:8080
@@ -210,7 +209,7 @@
           password: "{{ lookup('password', '/dev/null length=24 chars=ascii_letters,digits') }}"
           cert: false
           disable-telemetry: true
-          disable-update-check: true
+          user-data-dir: /home/{{ dev_user }}/.local/share/code-server
         dest: "/home/{{ dev_user }}/.config/code-server/config.yaml"
         owner: "{{ dev_user }}"
         group: "{{ dev_user }}"
