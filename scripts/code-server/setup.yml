@@ -5,14 +5,13 @@
   become: true
   vars:
     dev_user: "dev"
-    forgejo_version: "14.0.1"
+    forgejo_version: "4.108.2"
     torrserver_version: "MatriX.137"
     arch: "amd64"
 
   tasks:
     # --- 1. Пользователи ---
     - name: Создать пользователя dev
-      user:
         name: "{{ dev_user }}"
         shell: /bin/bash
         create_home: yes
