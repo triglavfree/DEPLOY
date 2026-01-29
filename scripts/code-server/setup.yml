@@ -182,10 +182,9 @@
         state: started
         daemon_reload: yes
 
-    # --- 5. code-server (версия 4.97.3 — проверенная и существующая) ---
-    - name: Установить code-server 4.97.3
+    - name: Установить code-server (последняя версия)
       shell: |
-        curl -fsSL https://code-server.dev/install.sh | sh -s -- --method=standalone --prefix=/usr/local --version 4.97.3
+        curl -fsSL https://code-server.dev/install.sh | sh -s -- --method=standalone --prefix=/usr/local
       args:
         creates: /usr/local/bin/code-server
       register: cs_install
