@@ -15,7 +15,7 @@ scripts/code-server/
 curl -fsSL https://raw.githubusercontent.com/triglavfree/deploy/main/scripts/code-server/bootstrap.sh | sudo -E bash
 ```
 
-# Итог
+# 🪬 Результат
 - Идемпотентность — можно запускать сколько угодно раз
 - Настоящий VSCodium в браузере (без телеметрии Microsoft)
 - Forgejo с SQLite
