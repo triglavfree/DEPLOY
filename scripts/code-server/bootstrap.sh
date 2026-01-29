@@ -3,8 +3,8 @@ set -e
 export DEBIAN_FRONTEND=noninteractive
 
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║  Self-Hosted Dev Platform — Ubuntu 24.04 Server              ║"
-echo "║  VSCodium (браузер) + Forgejo + TorrServer                   ║"
+echo "║  Self-Hosted Dev Platform — Ubuntu 24.04 Server             ║"
+echo "║  VSCodium (браузер) + Forgejo + TorrServer                  ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 
 # === Проверка прав ===
@@ -58,17 +58,14 @@ apt install -qq -y \
 # === 4. Установка uv через pipx (от пользователя) ===
 echo "🐍 Установка uv через pipx..."
 
-# Убедимся, что PATH включает ~/.local/bin
 run_as_user sh -c 'grep -q "export PATH=.*.local/bin" ~/.profile 2>/dev/null || echo "export PATH=\"\$HOME/.local/bin:\$PATH\"" >> ~/.profile' || true
 
-# Устанавливаем uv, если ещё не установлен
 if ! run_as_user command -v uv &> /dev/null; then
   run_as_user pipx install --quiet uv
 else
   echo "   → uv уже установлен"
 fi
 
-# Обновляем PATH для текущей сессии
 export PATH="/home/$TARGET_USER/.local/bin:$PATH"
 
 # === 5. Ansible через uv (в изолированном venv) ===
@@ -78,19 +75,20 @@ if [ ! -d "$ANSIBLE_VENV" ]; then
   uv venv "$ANSIBLE_VENV" --python 3.12
 fi
 
-# Устанавливаем Ansible, если не установлен
 if ! "$ANSIBLE_VENV/bin/ansible" --version &> /dev/null; then
   uv pip install --quiet "ansible-core>=2.16" -p "$ANSIBLE_VENV"
 fi
 
-# === 6. Подготовка конфигурации ===
+# === 6. Скачивание конфигурации ===
 DEPLOY_DIR="/opt/deploy-code-server"
-echo "📥 Подготовка плейбука и шаблонов..."
-mkdir -p "$DEPLOY_DIR/templates"
-
-# Скачиваем исправленные файлы из репозитория
-curl -fsSL https://raw.githubusercontent.com/triglavfree/DEPLOY/main/scripts/code-server/fixed_setup.yml -o "$DEPLOY_DIR/setup.yml"
-curl -fsSL https://raw.githubusercontent.com/triglavfree/DEPLOY/main/scripts/code-server/templates/code-server.service.j2 -o "$DEPLOY_DIR/templates/code-server.service.j2"
+if [ ! -f "$DEPLOY_DIR/setup.yml" ]; then
+  echo "📥 Скачивание плейбука и шаблонов..."
+  mkdir -p "$DEPLOY_DIR/templates"
+  curl -fsSL https://raw.githubusercontent.com/triglavfree/deploy/main/scripts/code-server/setup.yml \
+    -o "$DEPLOY_DIR/setup.yml"
+  curl -fsSL https://raw.githubusercontent.com/triglavfree/deploy/main/scripts/code-server/templates/code-server.service.j2 \
+    -o "$DEPLOY_DIR/templates/code-server.service.j2"
+fi
 
 # === 7. Запуск Ansible ===
 echo "🚀 Запуск развёртывания через Ansible..."
@@ -108,7 +106,7 @@ PASSWORD=$(grep -m1 password /home/dev/.config/code-server/config.yaml 2>/dev/nu
 
 echo ""
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║          УСТАНОВКА ЗАВЕРШЕНА                                 ║"
+echo "║  ✅ УСТАНОВКА ЗАВЕРШЕНА                                     ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 echo "🌐 Сервисы доступны из локальной сети (192.168.0.0/16):"
