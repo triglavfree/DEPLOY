@@ -3,8 +3,8 @@ set -e
 export DEBIAN_FRONTEND=noninteractive
 
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║  Self-Hosted Dev Platform — Ubuntu 24.04 Server              ║"
-echo "║  VSCodium (браузер) + Forgejo + TorrServer                   ║"
+echo "║  Self-Hosted Dev Platform — Ubuntu 24.04 Server             ║"
+echo "║  VSCodium (браузер) + Forgejo + TorrServer                  ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 
 # === Проверка прав ===
@@ -88,8 +88,10 @@ DEPLOY_DIR="/opt/deploy-code-server"
 if [ ! -f "$DEPLOY_DIR/setup.yml" ]; then
   echo "📥 Скачивание плейбука и шаблонов..."
   mkdir -p "$DEPLOY_DIR/templates"
+if [ ! -f "$DEPLOY_DIR/setup.yml" ]; then
   curl -fsSL https://raw.githubusercontent.com/triglavfree/deploy/main/scripts/code-server/setup.yml \
     -o "$DEPLOY_DIR/setup.yml"
+fi
   curl -fsSL https://raw.githubusercontent.com/triglavfree/deploy/main/scripts/code-server/templates/code-server.service.j2 \
     -o "$DEPLOY_DIR/templates/code-server.service.j2"
 fi
