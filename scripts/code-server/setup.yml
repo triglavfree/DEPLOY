@@ -1,15 +1,17 @@
 ---
-- name: Настройка self-hosted среды разработки (без GUI)
-  hosts: localhost
+- name: Deploy self-hosted dev platform (Forgejo + code-server + TorrServer)
+  hosts: 127.0.0.1
+  connection: local
   become: true
   vars:
     dev_user: "dev"
-    code_server_version: "4.98.1"  # актуальная версия
     forgejo_version: "14.0.1"
+    torrserver_version: "MatriX.137"
+    code_server_version: "4.98.1"
     arch: "amd64"
 
   tasks:
-    # 1. Создать пользователя dev (для работы в code-server)
+    # --- 1. Пользователи ---
     - name: Создать пользователя dev
       user:
         name: "{{ dev_user }}"
@@ -18,60 +20,80 @@
         groups: sudo
         append: yes
 
-    # 2. Установить зависимости
-    - name: Установить базовые пакеты
-      apt:
-        name:
-          - curl
-          - wget
-          - ca-certificates
-          - xz-utils
-          - sqlite3
-          - ufw
-        state: present
-        update_cache: yes
+    - name: Создать пользователя forgejo
+      user:
+        name: forgejo
+        system: yes
+        shell: /usr/sbin/nologin
+        home: /var/lib/forgejo
+        create_home: yes
 
-    # 3. Установить code-server (VSCodium в браузере)
-    - name: Скачать и установить code-server
-      shell: |
-        curl -fsSL https://code-server.dev/install.sh | sh -s -- --method=standalone --prefix=/usr/local --version {{ code_server_version }}
-      args:
-        creates: /usr/local/bin/code-server
+    - name: Создать пользователя torrserver
+      user:
+        name: torrserver
+        system: yes
+        shell: /usr/sbin/nologin
+        home: /var/lib/torrserver
+        create_home: yes
 
-    - name: Создать конфиг code-server
+    # --- 2. SSH: только по ключу ---
+    - name: Отключить вход по паролю в SSH
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+        backup: yes
+      loop:
+        - { regexp: '^#?PasswordAuthentication', line: 'PasswordAuthentication no' }
+        - { regexp: '^#?PermitRootLogin', line: 'PermitRootLogin no' }
+      notify: restart_ssh
+
+    # --- 3. TorrServer ---
+    - name: Скачать TorrServer
+      get_url:
+        url: "https://github.com/YouROK/TorrServer/releases/download/{{ torrserver_version }}/TorrServer-linux-amd64"
+        dest: "/usr/local/bin/torrserver"
+        mode: '0755'
+
+    - name: Создать каталоги TorrServer
       file:
-        path: "/home/{{ dev_user }}/.config/code-server"
+        path: "{{ item }}"
         state: directory
-        owner: "{{ dev_user }}"
-        group: "{{ dev_user }}"
-        mode: '0700'
+        owner: torrserver
+        group: torrserver
+        mode: '0750'
+      loop:
+        - /var/lib/torrserver/db
+        - /var/lib/torrserver/torrents
 
-    - name: Настроить code-server (доступ из локальной сети)
+    - name: Создать systemd-юнит TorrServer
       copy:
         content: |
-          bind-addr: 0.0.0.0:8080
-          auth: password
-          password: "{{ lookup('password', '/dev/null length=24 chars=ascii_letters,digits') }}"
-          cert: false
-        dest: "/home/{{ dev_user }}/.config/code-server/config.yaml"
-        owner: "{{ dev_user }}"
-        group: "{{ dev_user }}"
-        mode: '0600'
+          [Unit]
+          Description=TorrServer
+          After=network.target
 
-    - name: Создать systemd-юнит для code-server
-      template:
-        src: code-server.service.j2
-        dest: "/etc/systemd/system/code-server@{{ dev_user }}.service"
+          [Service]
+          Type=simple
+          User=torrserver
+          WorkingDirectory=/var/lib/torrserver
+          ExecStart=/usr/local/bin/torrserver -dir /var/lib/torrserver/db -port 8081
+          Restart=always
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/torrserver.service
         mode: '0644'
 
-    - name: Запустить code-server
+    - name: Запустить TorrServer
       systemd:
-        name: "code-server@{{ dev_user }}"
+        name: torrserver
         enabled: yes
         state: started
         daemon_reload: yes
 
-    # 4. Установить Forgejo
+    # --- 4. Forgejo ---
     - name: Скачать Forgejo
       get_url:
         url: "https://codeberg.org/forgejo/forgejo/releases/download/v{{ forgejo_version }}/forgejo-{{ forgejo_version }}-linux-{{ arch }}.xz"
@@ -88,14 +110,6 @@
         path: /usr/local/bin/forgejo
         mode: '0755'
 
-    - name: Создать пользователя forgejo
-      user:
-        name: forgejo
-        system: yes
-        shell: /usr/sbin/nologin
-        home: /var/lib/forgejo
-        create_home: yes
-
     - name: Создать каталоги Forgejo
       file:
         path: "{{ item }}"
@@ -105,9 +119,9 @@
         mode: '0750'
       loop:
         - /etc/forgejo
-        - /var/lib/forgejo
+        - /var/lib/forgejo/repositories
 
-    - name: Создать конфиг Forgejo (SQLite)
+    - name: Конфиг Forgejo (SQLite, LAN)
       copy:
         content: |
           [database]
@@ -121,7 +135,7 @@
           HTTP_PORT = 3000
           DOMAIN = localhost
           ROOT_URL = http://localhost:3000/
-          HTTP_ADDR = 0.0.0.0  # ← разрешить LAN
+          HTTP_ADDR = 0.0.0.0
 
           [security]
           INSTALL_LOCK = false
@@ -134,7 +148,7 @@
         group: forgejo
         mode: '0640'
 
-    - name: Создать systemd-юнит Forgejo
+    - name: Systemd-юнит Forgejo
       copy:
         content: |
           [Unit]
@@ -147,6 +161,7 @@
           WorkingDirectory=/var/lib/forgejo
           ExecStart=/usr/local/bin/forgejo web --config /etc/forgejo/app.ini
           Restart=always
+          RestartSec=5
 
           [Install]
           WantedBy=multi-user.target
@@ -160,19 +175,59 @@
         state: started
         daemon_reload: yes
 
-    # 5. Настроить файрвол (только LAN)
-    - name: Разрешить порты в LAN
+    # --- 5. code-server ---
+    - name: Установить code-server
       shell: |
-        ufw allow from 192.168.0.0/16 to any port 8080
-        ufw allow from 192.168.0.0/16 to any port 3000
+        curl -fsSL https://code-server.dev/install.sh | sh -s -- --method=standalone --prefix=/usr/local --version {{ code_server_version }}
+      args:
+        creates: /usr/local/bin/code-server
+
+    - name: Создать конфиг code-server
+      file:
+        path: "/home/{{ dev_user }}/.config/code-server"
+        state: directory
+        owner: "{{ dev_user }}"
+        group: "{{ dev_user }}"
+        mode: '0700'
+
+    - name: Настроить code-server (LAN + пароль)
+      copy:
+        content: |
+          bind-addr: 0.0.0.0:8080
+          auth: password
+          password: "{{ lookup('password', '/dev/null length=24 chars=ascii_letters,digits') }}"
+          cert: false
+        dest: "/home/{{ dev_user }}/.config/code-server/config.yaml"
+        owner: "{{ dev_user }}"
+        group: "{{ dev_user }}"
+        mode: '0600'
+
+    - name: Systemd-юнит code-server
+      template:
+        src: templates/code-server.service.j2
+        dest: "/etc/systemd/system/code-server@{{ dev_user }}.service"
+        mode: '0644'
+
+    - name: Запустить code-server
+      systemd:
+        name: "code-server@{{ dev_user }}"
+        enabled: yes
+        state: started
+        daemon_reload: yes
+
+    # --- 6. UFW (только локальная сеть) ---
+    - name: Настроить UFW для локальной сети
+      shell: |
+        ufw default deny incoming
+        ufw default allow outgoing
+        ufw allow from 192.168.0.0/16 to any port 8080 comment 'code-server'
+        ufw allow from 192.168.0.0/16 to any port 3000 comment 'Forgejo'
+        ufw allow from 192.168.0.0/16 to any port 8081 comment 'TorrServer'
+        ufw allow proto tcp from any to any port 22 comment 'SSH'
         ufw --force enable
 
-    # 6. Вывести инструкцию
-    - name: Инструкция по использованию
-      debug:
-        msg:
-          - "✅ Готово!"
-          - "• code-server (VSCodium в браузере): http://<IP_вашего_ноутбука>:8080"
-          - "• Forgejo (Git-сервер): http://<IP_вашего_ноутбука>:3000"
-          - "• Пароль от code-server сохранён в /home/dev/.config/code-server/config.yaml"
-          - "• Доступ только из локальной сети (192.168.0.0/16)"
+  handlers:
+    - name: restart_ssh
+      systemd:
+        name: ssh
+        state: restarted
