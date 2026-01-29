@@ -102,8 +102,7 @@ LOCAL_IP=$(ip -4 addr show scope global 2>/dev/null | grep -oP '(?<=inet\s)\d+(\
 [ -z "$LOCAL_IP" ] && LOCAL_IP="IP_НЕ_ОПРЕДЕЛЁН"
 
 # === 9. Финальная инструкция ===
-PASSWORD=$(grep -m1 password /home/dev/.config/code-server/config.yaml 2>/dev/null | cut -d' ' -f3 || echo "см. файл")
-
+PASSWORD=$(sudo grep -m1 '^password:' /home/dev/.config/code-server/config.yaml 2>/dev/null | sed 's/.*: "//; s/"$//' || echo "см. файл")
 echo ""
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║  ✅ УСТАНОВКА ЗАВЕРШЕНА                                     ║"
