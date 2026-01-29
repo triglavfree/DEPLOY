@@ -183,29 +183,24 @@
         daemon_reload: yes
 
     # --- 5. code-server (установка напрямую из tar.gz) ---
-    - name: Скачать code-server 4.108.2 (tar.gz)
+    - name: Скачать code-server 4.108.2
       get_url:
         url: "https://github.com/coder/code-server/releases/download/v4.108.2/code-server-4.108.2-linux-amd64.tar.gz"
         dest: "/tmp/code-server.tar.gz"
         mode: '0644'
-      register: cs_download
-      until: cs_download is succeeded
-      retries: 3
-      delay: 5
     
-    - name: Распаковать code-server в /usr/local/bin/
+    - name: Распаковать в /usr/local/bin/
       unarchive:
         src: "/tmp/code-server.tar.gz"
         dest: "/usr/local/bin/"
         remote_src: yes
-        creates: "/usr/local/bin/code-server"
+        creates: "/usr/local/bin/code-server-4.108.2-linux-amd64"
     
-    - name: Создать символическую ссылку (если нужно)
+    - name: Создать символическую ссылку
       file:
         src: "/usr/local/bin/code-server-4.108.2-linux-amd64/code-server"
         dest: "/usr/local/bin/code-server"
         state: link
-        force: yes
     
     - name: Создать директорию конфига code-server
       file:
