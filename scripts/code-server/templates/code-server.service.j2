@@ -1,0 +1,14 @@
+[Unit]
+Description=code-server for %i
+After=network.target
+
+[Service]
+Type=exec
+User=%i
+WorkingDirectory=/home/%i
+Environment=HOME=/home/%i
+ExecStart=/usr/local/bin/code-server
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
