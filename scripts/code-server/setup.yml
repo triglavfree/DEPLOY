@@ -10,6 +10,25 @@
     arch: "amd64"
 
   tasks:
+    # --- 0. Проверка и остановка запущенных служб (для идемпотентности) ---
+    - name: Проверить статус службы code-server
+      systemd:
+        name: "code-server@{{ dev_user }}"
+        state: stopped
+      ignore_errors: yes
+
+    - name: Проверить статус службы forgejo
+      systemd:
+        name: forgejo
+        state: stopped
+      ignore_errors: yes
+
+    - name: Проверить статус службы torrserver
+      systemd:
+        name: torrserver
+        state: stopped
+      ignore_errors: yes
+
     # --- 1. Пользователи ---
     - name: Создать пользователя dev
       user:
@@ -89,12 +108,12 @@
         dest: /etc/systemd/system/torrserver.service
         mode: '0644'
 
-    - name: Запустить TorrServer
-      systemd:
-        name: torrserver
-        enabled: yes
-        state: started
-        daemon_reload: yes
+     - name: Запустить TorrServer
+       systemd:
+         name: torrserver
+         enabled: yes
+         state: started
+       notify: reload_systemd_daemon
 
     # --- 4. Forgejo ---
     - name: Скачать Forgejo
@@ -178,12 +197,12 @@
         dest: /etc/systemd/system/forgejo.service
         mode: '0644'
 
-    - name: Запустить Forgejo
-      systemd:
-        name: forgejo
-        enabled: yes
-        state: started
-        daemon_reload: yes
+     - name: Запустить Forgejo
+       systemd:
+         name: forgejo
+         enabled: yes
+         state: started
+       notify: reload_systemd_daemon
 
      # --- 5. code-server (установка последней совместимой версии) ---
      - name: Установить code-server через официальный скрипт
@@ -234,12 +253,12 @@
         dest: "/etc/systemd/system/code-server@{{ dev_user }}.service"
         mode: '0644'
 
-    - name: Запустить code-server
-      systemd:
-        name: "code-server@{{ dev_user }}"
-        enabled: yes
-        state: started
-        daemon_reload: yes
+     - name: Запустить code-server
+       systemd:
+         name: "code-server@{{ dev_user }}"
+         enabled: yes
+         state: started
+       notify: reload_systemd_daemon
 
     # --- 6. UFW (только локальная сеть) ---
     - name: Настроить UFW для локальной сети
@@ -252,8 +271,12 @@
         ufw allow proto tcp from any to any port 22 comment 'SSH'
         ufw --force enable
 
-  handlers:
-    - name: restart_ssh
-      systemd:
-        name: ssh
-        state: restarted
+   handlers:
+     - name: restart_ssh
+       systemd:
+         name: ssh
+         state: restarted
+
+     - name: reload_systemd_daemon
+       systemd:
+         daemon_reload: yes
