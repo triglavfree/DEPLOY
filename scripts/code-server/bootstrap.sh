@@ -63,10 +63,22 @@ apt install -qq -y \
 
 # 4. pipx + uv
 echo "🐍 Установка pipx и uv..."
-python3 -m pip install --quiet --user pipx
-python3 -m pipx ensurepath
-export PATH="$HOME/.local/bin:$PATH"
-pipx install --quiet uv
+
+# Определяем исходного пользователя
+if [ -n "$S sudo_user" ]; then
+  TARGET_USER="$SUDO_USER"
+else
+  TARGET_USER="$(logname 2>/dev/null || whoami)"
+fi
+
+# Устанавливаем pipx через системный пакетный менеджер
+apt install -qq -y pipx
+
+# Устанавливаем uv через pipx от имени пользователя
+sudo -u "$TARGET_USER" pipx install --quiet uv
+
+# Добавляем в PATH
+export PATH="/home/$TARGET_USER/.local/bin:$PATH"
 
 # 5. Ansible через uv
 echo "⚙️  Установка Ansible..."
