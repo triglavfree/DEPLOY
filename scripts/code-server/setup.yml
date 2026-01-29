@@ -1,5 +1,5 @@
 ---
-- name: Deploy self-hosted dev platform (VSCodium + Forgejo + TorrServer)
+- name: Deploy self-hosted dev platform (code-server + Forgejo + TorrServer)
   hosts: 127.0.0.1
   connection: local
   become: true
@@ -7,8 +7,7 @@
     dev_user: "dev"
     forgejo_version: "14.0.1"
     torrserver_version: "MatriX.137"
-    code_server_version: "4.97.2"  # ← Проверенная версия
-    vscodium_version: "1.96.2"     # ← Последняя стабильная
+    code_server_version: "4.97.3"  # ← Актуальная стабильная версия
     arch: "amd64"
 
   tasks:
@@ -104,6 +103,10 @@
         url: "https://codeberg.org/forgejo/forgejo/releases/download/v{{ forgejo_version }}/forgejo-{{ forgejo_version }}-linux-{{ arch }}.xz"
         dest: "/tmp/forgejo.xz"
         mode: '0644'
+      register: forgejo_download
+      until: forgejo_download is succeeded
+      retries: 3
+      delay: 5
 
     - name: Распаковать Forgejo
       shell: xz --decompress --stdout /tmp/forgejo.xz > /usr/local/bin/forgejo
@@ -180,47 +183,38 @@
         state: started
         daemon_reload: yes
 
-    # --- 5. VSCodium (браузерная версия) ---
-    - name: Скачать VSCodium
-      unarchive:
-        src: "https://github.com/VSCodium/vscodium/releases/download/{{ vscodium_version }}/VSCodium-linux-x64-{{ vscodium_version }}.tar.gz"
-        dest: /opt/
-        remote_src: yes
-        extra_opts: [--strip-components=1]
-        creates: /opt/vscodium
-
-    - name: Переименовать в /opt/vscodium (если нужно)
-      command: mv /opt/VSCodium-* /opt/vscodium
-      args:
-        creates: /opt/vscodium
-      ignore_errors: yes
-
-    - name: Установить code-server (серверная часть)
+    # --- 5. code-server (полностью открытая версия без телеметрии) ---
+    - name: Установить code-server
       shell: |
         curl -fsSL https://code-server.dev/install.sh | sh -s -- --method=standalone --prefix=/usr/local --version {{ code_server_version }}
       args:
         creates: /usr/local/bin/code-server
+      register: cs_install
+      until: cs_install is succeeded
+      retries: 3
+      delay: 5
 
-    - name: Создать конфиг code-server с путём к VSCodium
-      copy:
-        content: |
-          bind-addr: 0.0.0.0:8080
-          auth: password
-          password: "{{ lookup('password', '/dev/null length=24 chars=ascii_letters,digits') }}"
-          cert: false
-          vscode-path: /opt/vscodium
-        dest: "/home/{{ dev_user }}/.config/code-server/config.yaml"
-        owner: "{{ dev_user }}"
-        group: "{{ dev_user }}"
-        mode: '0600'
-
-    - name: Создать директорию .config/code-server
+    - name: Создать директорию конфига code-server
       file:
         path: "/home/{{ dev_user }}/.config/code-server"
         state: directory
         owner: "{{ dev_user }}"
         group: "{{ dev_user }}"
         mode: '0700'
+
+    - name: Создать конфиг code-server (без телеметрии)
+      copy:
+        content: |
+          bind-addr: 0.0.0.0:8080
+          auth: password
+          password: "{{ lookup('password', '/dev/null length=24 chars=ascii_letters,digits') }}"
+          cert: false
+          disable-telemetry: true
+          disable-update-check: true
+        dest: "/home/{{ dev_user }}/.config/code-server/config.yaml"
+        owner: "{{ dev_user }}"
+        group: "{{ dev_user }}"
+        mode: '0600'
 
     - name: Systemd-юнит code-server
       template:
@@ -240,7 +234,7 @@
       shell: |
         ufw default deny incoming
         ufw default allow outgoing
-        ufw allow from 192.168.0.0/16 to any port 8080 comment 'VSCodium'
+        ufw allow from 192.168.0.0/16 to any port 8080 comment 'code-server'
         ufw allow from 192.168.0.0/16 to any port 3000 comment 'Forgejo'
         ufw allow from 192.168.0.0/16 to any port 8081 comment 'TorrServer'
         ufw allow proto tcp from any to any port 22 comment 'SSH'
