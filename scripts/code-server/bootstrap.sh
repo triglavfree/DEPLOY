@@ -75,12 +75,13 @@ export PATH="/home/$TARGET_USER/.local/bin:$PATH"
 ANSIBLE_VENV="/opt/ansible"
 if [ ! -d "$ANSIBLE_VENV" ]; then
   echo "⚙️  Создание изолированного окружения для Ansible..."
-  uv venv "$ANSIBLE_VENV" --python 3.12
+  # Используем ГЛОБАЛЬНЫЙ uv (установленный через pipx)
+  /home/"$TARGET_USER"/.local/bin/uv venv "$ANSIBLE_VENV" --python 3.12
 fi
 
-# Устанавливаем Ansible, если не установлен
+# Устанавливаем Ansible через ГЛОБАЛЬНЫЙ uv
 if ! "$ANSIBLE_VENV/bin/ansible" --version &> /dev/null; then
-  "$ANSIBLE_VENV/bin/uv" pip install --quiet "ansible-core>=2.16"
+  /home/"$TARGET_USER"/.local/bin/uv pip install --quiet "ansible-core>=2.16" -p "$ANSIBLE_VENV"
 fi
 
 # === 6. Скачивание конфигурации (если ещё не скачана) ===
