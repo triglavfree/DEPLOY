@@ -21,4 +21,4 @@ curl -fsSL https://raw.githubusercontent.com/triglavfree/deploy/main/scripts/cod
 - Forgejo с SQLite
 - TorrServer для стриминга торрентов
 - Полная безопасность и оптимизация ✅ `ufw`, `fail2ban` ✅ Используем глобальный `uv` из `/home/user/.local/bin/uv`
-- Нет телеметрии в Microsoft ✅ disable-telemetry: true + Open VSX вместо Marketplace
+- Нет телеметрии в Microsoft ✅ disable-telemetry: true + Open VSX вместо Marketplace ✅ Никаких фоновых соединений с внешними серверами
