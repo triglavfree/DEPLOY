@@ -185,39 +185,48 @@
         state: started
         daemon_reload: yes
 
-    # --- 5. code-server (версия 4.108.2 — последняя стабильная) ---
-    - name: Установить code-server 4.108.2 через официальный скрипт
-      shell: |
-        curl -fsSL https://code-server.dev/install.sh | sh -s -- --method=standalone --prefix=/usr/local --version 4.108.2
-      args:
-        creates: /usr/local/bin/code-server
-      register: cs_install
-      until: cs_install is succeeded
-      retries: 3
-      delay: 5
+     # --- 5. code-server (установка последней совместимой версии) ---
+     - name: Установить code-server через официальный скрипт
+       shell: |
+         curl -fsSL https://code-server.dev/install.sh | sh -s -- --method=standalone --prefix=/usr/local
+       args:
+         creates: /usr/local/bin/code-server
+       register: cs_install
+       until: cs_install is succeeded
+       retries: 3
+       delay: 5
 
-    - name: Создать директорию конфига code-server
-      file:
-        path: "/home/{{ dev_user }}/.config/code-server"
-        state: directory
-        owner: "{{ dev_user }}"
-        group: "{{ dev_user }}"
-        mode: '0700'
+     - name: Создать директорию конфига code-server
+       file:
+         path: "/home/{{ dev_user }}/.config/code-server"
+         state: directory
+         owner: "{{ dev_user }}"
+         group: "{{ dev_user }}"
+         mode: '0700'
 
-    - name: Создать конфиг code-server (без телеметрии)
-      copy:
-        content: |
-          bind-addr: 0.0.0.0:8080
-          auth: password
-          password: "{{ lookup('password', '/dev/null length=24 chars=ascii_letters,digits') }}"
-          cert: false
-          disable-telemetry: true
-          disable-update-check: true
-          user-data-dir: /home/{{ dev_user }}/.local/share/code-server
-        dest: "/home/{{ dev_user }}/.config/code-server/config.yaml"
-        owner: "{{ dev_user }}"
-        group: "{{ dev_user }}"
-        mode: '0600'
+     - name: Создать директорию данных code-server
+       file:
+         path: "/home/{{ dev_user }}/.local/share/code-server"
+         state: directory
+         owner: "{{ dev_user }}"
+         group: "{{ dev_user }}"
+         mode: '0700'
+
+     - name: Создать конфиг code-server (без телеметрии и с фиксированным путем данных)
+       copy:
+         content: |
+           bind-addr: 0.0.0.0:8080
+           auth: password
+           password: "{{ lookup('password', '/dev/null length=24 chars=ascii_letters,digits') }}"
+           cert: false
+           disable-telemetry: true
+           disable-update-check: true
+           user-data-dir: /home/{{ dev_user }}/.local/share/code-server
+           data-dir: /home/{{ dev_user }}/.local/share/code-server
+         dest: "/home/{{ dev_user }}/.config/code-server/config.yaml"
+         owner: "{{ dev_user }}"
+         group: "{{ dev_user }}"
+         mode: '0600'
 
     - name: Systemd-юнит code-server
       template:
